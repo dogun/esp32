@@ -1,0 +1,21 @@
+<html>
+<head><title>LED Controller</title></head>
+<body>
+<script>
+function set_duty(board_id, led_id) {
+	var ele_id = board_id+'_'+led_id;
+	var ele = document.getElementById(ele_id);
+	alert(ele.value);
+}
+
+function write_one(board_id, led_id) {
+	document.write('<input id="'+board_id+'_'+led_id+'" type="range" min="0" max="100" value="70" onchange="set_duty('+board_id+','+led_id+')" />');
+}
+for (i = 0; i < 2; ++i) {
+	for (j = 2; j < 12; ++j) {
+		write_one(i, j);
+	}
+}
+</script>
+</body>
+</html>
