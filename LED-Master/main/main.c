@@ -32,7 +32,7 @@ void app_main(void) {
     	run_wifi();
 
 		uint8_t bf[10] = {0};
-		read_from_board(0, bf, sizeof(bf));
+		read_from_board(100, bf, sizeof(bf));
 		if (bf[0] > 0)
 			ESP_LOGI(TAG, "read data: %s", bf);
 

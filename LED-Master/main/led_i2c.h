@@ -24,7 +24,6 @@
 
 #define PIN_NUM 10
 #define BOARD_COUNT 2
-const int BOARD_IDS[BOARD_COUNT] = { 100, 101 };
 
 int set_duty(int board_index, uint8_t pin_id, uint8_t duty) {
 	ESP_LOGI(I2C_TAG, "set_duty, board:%d, pin:%d, duty:%d", board_index,
@@ -35,7 +34,7 @@ int set_duty(int board_index, uint8_t pin_id, uint8_t duty) {
 	int retry = 0;
 	while (1) {
 		esp_err_t err = i2c_master_write_to_device(I2C_MASTER_NUM,
-				BOARD_IDS[board_index], wb, sizeof(wb),
+				board_index, wb, sizeof(wb),
 				I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
 		if (err != ESP_OK) {
 			ESP_LOGE(I2C_TAG, "set_duty ERROR: %d, %s", err,
@@ -49,7 +48,7 @@ int set_duty(int board_index, uint8_t pin_id, uint8_t duty) {
 
 void read_from_board(int board_index, uint8_t* bf, size_t size) {
 	esp_err_t err = i2c_master_read_from_device(I2C_MASTER_NUM,
-			BOARD_IDS[board_index], bf, size,
+			board_index, bf, size,
 			I2C_MASTER_TIMEOUT_MS / portTICK_PERIOD_MS);
 	if (err != ESP_OK) {
 		ESP_LOGE(I2C_TAG, "read board ERROR: %d, %s", err,
