@@ -48,7 +48,7 @@ void _url_decode(char* res) {
 	ESP_LOGI(HTTP_TAG, "urldecode res ok: %s", res);
 }
 
-esp_err_t _get_handler_index(httpd_req_t* req) {
+esp_err_t _get_handler_wifi(httpd_req_t* req) {
 	char* res = "<html><body><form method=\"post\" action=\"/save\"><input name=\"ssid\" /><input name=\"pass\" /><input type=\"submit\" /></body></html>";
 	httpd_resp_send(req, res, HTTPD_RESP_USE_STRLEN);
 	return ESP_OK;
@@ -105,7 +105,7 @@ esp_err_t _post_handler_save(httpd_req_t* req) {
 }
 
 esp_err_t _get_handler_leds(httpd_req_t* req) {
-	char* res = "<html><body></body></html>";
+	char* res = "<html><head><title>LED Controller</title></head><body><p><iframe id=\"res\" src=\"about:blank\"></iframe></p><script src=\"http://yueyue.com/led_con.js\"></script></body></html>";
 	httpd_resp_send(req, res, HTTPD_RESP_USE_STRLEN);
 	return ESP_OK;
 }
@@ -149,10 +149,10 @@ esp_err_t _get_handler_duty(httpd_req_t* req) {
 }
 
 
-httpd_uri_t _uri_get_index = {
-		.uri = "/",
+httpd_uri_t _uri_get_wifi = {
+		.uri = "/wifi",
 		.method = HTTP_GET,
-		.handler = _get_handler_index,
+		.handler = _get_handler_wifi,
 		.user_ctx = NULL
 };
 
@@ -183,7 +183,7 @@ httpd_handle_t start_webserver(void (*h)(char*, char*)) {
 	httpd_config_t config = HTTPD_DEFAULT_CONFIG();
 
 	if (httpd_start(&server, &config) == ESP_OK) {
-		httpd_register_uri_handler(server, &_uri_get_index);
+		httpd_register_uri_handler(server, &_uri_get_wifi);
 		httpd_register_uri_handler(server, &_uri_post_save);
 		httpd_register_uri_handler(server, &_uri_get_leds);
 		httpd_register_uri_handler(server, &_uri_get_duty);
