@@ -21,7 +21,7 @@ void app_main(void) {
 	int wifi_reset_cnt = 0;
     while (true) {
     	int gpio_level = gpio_get_level(WIFI_RESET);
-    	if (gpio_level == 1) {
+    	if (gpio_level == 0) {
     		wifi_reset_cnt ++;
     	}
     	if (wifi_reset_cnt > 2) {
