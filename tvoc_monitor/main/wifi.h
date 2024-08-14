@@ -79,12 +79,15 @@ void _wifi_event_handler(void *arg, esp_event_base_t event_base,
 
 static char sta_ssid[CONFIG_SSID_LEN];
 static char sta_password[CONFIG_PASS_LEN];
+static char sta_uid[CONFIG_SSID_LEN];
 
-void _pass_event_handler(char* ssid, char* pass) {
+void _pass_event_handler(char* ssid, char* pass, char* uid) {
 	strcpy(sta_ssid, ssid);
 	strcpy(sta_password, pass);
+	strcpy(sta_uid, uid);
 	save_config(CONFIG_SSID, sta_ssid);
 	save_config(CONFIG_PASSWORD, sta_password);
+	save_config(CONFIG_UID, sta_uid);
 
 	wifi_status = PASS_OK;
 }
@@ -155,13 +158,16 @@ void init_wifi() {
 	init_fs();
     bzero(sta_ssid, sizeof(sta_ssid));
     bzero(sta_password, sizeof(sta_password));
+    bzero(sta_uid, sizeof(sta_uid));
     read_config(CONFIG_SSID, sta_ssid, sizeof(sta_ssid));
     read_config(CONFIG_PASSWORD, sta_password, sizeof(sta_password));
+    read_config(CONFIG_UID, sta_uid, sizeof(sta_uid));
+
     char _status[8];
     bzero(_status, 8);
     read_config(CONFIG_STATUS, _status, 8);
     if (strcmp(_status, "STA_OK") == 0 && strlen(sta_ssid) > 0 && strlen(sta_password) > 0) {
-    	ESP_LOGI(WIFI_TAG, "sta_ok, ssid: %s, pass: %s", sta_ssid, sta_password);
+    	ESP_LOGI(WIFI_TAG, "sta_ok, ssid: %s, pass: %s, uid: %s", sta_ssid, sta_password, sta_uid);
     	wifi_status = PASS_OK;
     }
 }

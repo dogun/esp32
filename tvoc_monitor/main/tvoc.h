@@ -57,7 +57,7 @@ static void tvoc_task(void *arg)
 			co2 = (data[2] << 8) + data[3];
 			tvoc = (data[4] << 8) + data[5];
 			jq = (data[6] << 8) + data[7];
-			ESP_LOGI(TAG, "Recv str:%d %d %d", tvoc, co2, jq);
+			ESP_LOGD(TAG, "Recv str:%d %d %d", tvoc, co2, jq);
         }
     }
 }

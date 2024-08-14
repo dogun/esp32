@@ -54,7 +54,7 @@ void app_main(void) {
     	
    		if (wifi_ready == 1) {
 			 if (_tvoc != tvoc || _co2 != co2 || _jq != jq) {
-				 set_data(tvoc, co2, jq);
+				 set_data(tvoc, co2, jq, sta_uid);
 				 _tvoc = tvoc;
 				 _co2 = co2;
 				 _jq = jq;

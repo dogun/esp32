@@ -13,6 +13,7 @@
 
 #define CONFIG_SSID "ssid"
 #define CONFIG_PASSWORD "password"
+#define CONFIG_UID "uid"
 #define CONFIG_STATUS "status"
 
 #define ESP_WIFI_MAXIMUM_RETRY 5

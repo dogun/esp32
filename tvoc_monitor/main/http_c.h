@@ -17,10 +17,10 @@ esp_err_t _http_c_event_handler(esp_http_client_event_t *evt) {
 	return ESP_OK;
 }
 
-void set_data(int tvoc, int co2, int jq) {
+void set_data(int tvoc, int co2, int jq, char* uid) {
 	char local_response_buffer[512] = {0};
 	char q[128] = {0};
-	sprintf(q, "p=%s&t=%d&c=%d&j=%d", DATA_PASSWORD, tvoc, co2, jq);
+	sprintf(q, "p=%s&t=%d&c=%d&j=%d", uid, tvoc, co2, jq);
     esp_http_client_config_t config = {
         .host = SERVER_HOST,
         .path = SERVER_PATH,
