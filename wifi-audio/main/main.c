@@ -6,6 +6,8 @@
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
 #include "nvs_flash.h"
+#include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 #include <sys/param.h>
 
@@ -14,21 +16,25 @@
 #include "lwip/sys.h"
 #include <lwip/netdb.h>
 
+#include "i2s.h"
 #include "wifi.h"
+#include "eq.h"
+#include "eq_config.h"
 
-#define SERVER_PIN GPIO_NUM_33
+#define SERVER_MODE 0
+
+#define SETTING_PIN GPIO_NUM_33
 
 static const char *TAG = "wifi-audio";
-static const char *payload = "12345678";
 
 static void udp_server_task(void *pvParameters) {
-  char rx_buffer[128];
-  char addr_str[128];
   int addr_family = AF_INET;
   int ip_protocol = 0;
   struct sockaddr_in dest_addr;
 
   int port = 12345;
+
+  i2s_write_init();
 
   while (1) {
     if (wifi_status != AP_OK) {
@@ -66,24 +72,18 @@ static void udp_server_task(void *pvParameters) {
 
     while (1) {
       ESP_LOGI(TAG, "Waiting for data");
-      int len = recvfrom(sock, rx_buffer, sizeof(rx_buffer) - 1, 0,
+      int len = recvfrom(sock, i2s_buf, sizeof(i2s_buf) * sizeof(int32_t), 0,
                          (struct sockaddr *)&source_addr, &socklen);
       if (len < 0) {
         ESP_LOGE(TAG, "recvfrom failed: errno %d", errno);
         break;
       } else {
-        inet_ntoa_r(((struct sockaddr_in *)&source_addr)->sin_addr, addr_str,
-                    sizeof(addr_str) - 1);
-
-        rx_buffer[len] = 0;
-        ESP_LOGI(TAG, "Received %d bytes from %s:", len, addr_str);
-        ESP_LOGI(TAG, "%s", rx_buffer);
-
-        int err = sendto(sock, rx_buffer, len, 0,
-                         (struct sockaddr *)&source_addr, sizeof(source_addr));
-        if (err < 0) {
-          ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
-          break;
+        ESP_LOGI(TAG, "Received %d bytes", len);
+		_apply_biquads_r(i2s_buf, i2s_buf, len / sizeof(int32_t));
+		_apply_biquads_l(i2s_buf, i2s_buf, len / sizeof(int32_t));
+        int w_size = i2s_write(len);
+        if (w_size != len) {
+          ESP_LOGE(TAG, "i2s write failed: errno %d, size %d", errno, w_size);
         }
       }
     }
@@ -98,18 +98,20 @@ static void udp_server_task(void *pvParameters) {
 }
 
 static void udp_client_task(void *pvParameters) {
-  char rx_buffer[128];
   char host_ip[] = "192.168.4.1";
   int port = 12345;
   int addr_family = 0;
   int ip_protocol = 0;
 
+  init_i2s_read();
+
   while (1) {
     if (wifi_status != STA_OK) {
       ESP_LOGI(TAG, "client: wait wifi");
-      vTaskDelay(2000 / portTICK_PERIOD_MS);
+      vTaskDelay(1000 / portTICK_PERIOD_MS);
       continue;
     }
+
     struct sockaddr_in dest_addr;
     dest_addr.sin_addr.s_addr = inet_addr(host_ip);
     dest_addr.sin_family = AF_INET;
@@ -131,34 +133,23 @@ static void udp_client_task(void *pvParameters) {
     ESP_LOGI(TAG, "Socket created, sending to %s:%d", host_ip, port);
 
     while (1) {
-
-      int err = sendto(sock, payload, strlen(payload), 0,
-                       (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+      int r_size = i2s_read();
+      if (r_size <= 0) {
+        ESP_LOGE(TAG, "i2s read error: %d %d", r_size, errno);
+        //vTaskDelay(1000 / portTICK_PERIOD_MS);
+        r_size = 32;
+        sendto(sock, i2s_buf, r_size, 0, (struct sockaddr *)&dest_addr,
+                       sizeof(dest_addr));
+        ESP_LOGI(TAG, "sent1: %d", r_size);
+        continue;
+      }
+      int err = sendto(sock, i2s_buf, r_size, 0, (struct sockaddr *)&dest_addr,
+                       sizeof(dest_addr));
       if (err < 0) {
         ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
         break;
       }
-      ESP_LOGI(TAG, "Message sent");
-
-      struct sockaddr_storage source_addr;
-      socklen_t socklen = sizeof(source_addr);
-      int len = recvfrom(sock, rx_buffer, sizeof(rx_buffer) - 1, 0,
-                         (struct sockaddr *)&source_addr, &socklen);
-
-      if (len < 0) {
-        ESP_LOGE(TAG, "recvfrom failed: errno %d", errno);
-        break;
-      } else {
-        rx_buffer[len] = 0;
-        ESP_LOGI(TAG, "Received %d bytes from %s:", len, host_ip);
-        ESP_LOGI(TAG, "%s", rx_buffer);
-        if (strncmp(rx_buffer, "OK: ", 4) == 0) {
-          ESP_LOGI(TAG, "Received expected message, reconnecting");
-          break;
-        }
-      }
-
-      vTaskDelay(2000 / portTICK_PERIOD_MS);
+      ESP_LOGI(TAG, "sent: %d", r_size);
     }
 
     if (sock != -1) {
@@ -171,24 +162,34 @@ static void udp_client_task(void *pvParameters) {
 }
 
 void app_main(void) {
-  gpio_reset_pin(SERVER_PIN);
-  gpio_set_direction(SERVER_PIN, GPIO_MODE_INPUT);
+  gpio_reset_pin(SETTING_PIN);
+  gpio_set_direction(SETTING_PIN, GPIO_MODE_INPUT);
 
   init_wifi();
+  i2s_init_std_duplex();
 
-  int is_server = gpio_get_level(SERVER_PIN);
-  is_server = 1;
-
-  if (!is_server) {
+  if (SERVER_MODE == 0) {
     xTaskCreate(udp_client_task, "udp_client", 4096, NULL, 5, NULL);
   } else {
     save_config(CONFIG_SSID, "");
     save_config(CONFIG_PASSWORD, "");
     save_config(CONFIG_UID, "");
+    load_eq();
     xTaskCreate(udp_server_task, "udp_server", 4096, NULL, 5, NULL);
   }
+  int reconfiging = 0;
   while (true) {
-    run_wifi(is_server);
+	int setting = gpio_get_level(SETTING_PIN);
+	setting = 0;
+	if (setting == 1) {
+		if (reconfiging == 0) {
+			reconfig_wifi();
+			reconfiging = 1;
+		}
+		run_wifi(0);
+	} else {
+    	run_wifi(SERVER_MODE);
+    }
     sleep(1);
   }
 }
