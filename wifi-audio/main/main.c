@@ -25,7 +25,21 @@
 
 #define SETTING_PIN GPIO_NUM_33
 
+static SemaphoreHandle_t i2s_sem;
 static const char *TAG = "wifi-audio";
+
+static void i2s_write_task(void *pvParameters) {
+	while (1) {
+		xSemaphoreTake(i2s_sem, portMAX_DELAY);
+		  //_apply_biquads_r(i2s_buf, i2s_buf, len / sizeof(int32_t));
+		  //_apply_biquads_l(i2s_buf, i2s_buf, len / sizeof(int32_t));
+		  int w_size = i2s_write(i2s_buf_len);
+		  if (w_size != i2s_buf_len) {
+			ESP_LOGE(TAG, "i2s write failed: errno %d, size %d", errno, w_size);
+		  }
+	}
+	vTaskDelete(NULL);
+}
 
 static void do_retransmit(const int sock) {
   int len;
@@ -37,12 +51,7 @@ static void do_retransmit(const int sock) {
       ESP_LOGW(TAG, "Connection closed");
     } else {
       //ESP_LOGI(TAG, "Received %d bytes", len);
-      //_apply_biquads_r(i2s_buf, i2s_buf, len / sizeof(int32_t));
-      //_apply_biquads_l(i2s_buf, i2s_buf, len / sizeof(int32_t));
-      int w_size = i2s_write(len);
-      if (w_size != len) {
-        ESP_LOGE(TAG, "i2s write failed: errno %d, size %d", errno, w_size);
-      }
+    	xSemaphoreGive(i2s_sem);
     }
   } while (len > 0);
 }
@@ -189,6 +198,8 @@ static void tcp_client_task(void *pvParameters) {
 }
 
 void app_main(void) {
+	i2s_sem = xSemaphoreCreateBinary();
+
   gpio_reset_pin(SETTING_PIN);
   gpio_set_direction(SETTING_PIN, GPIO_MODE_INPUT);
 
@@ -214,8 +225,10 @@ void app_main(void) {
     save_config(CONFIG_PASSWORD, "");
     save_config(CONFIG_UID, "");
     load_eq();
+    xTaskCreatePinnedToCore(i2s_write_task, "i2s_write", 4096, NULL, 5, NULL,
+                                1);
     xTaskCreatePinnedToCore(tcp_server_task, "tcp_server", 4096, NULL, 5, NULL,
-                            1);
+                            0);
     gpio_set_level(GPIO_NUM_17, 1);
     gpio_set_level(GPIO_NUM_16, 0);
   }

@@ -24,7 +24,15 @@
 static i2s_chan_handle_t tx_chan;
 static i2s_chan_handle_t rx_chan;
 
-static int8_t i2s_buf[4096] = {0};
+static uint8_t buf_flag = 0;
+
+static size_t i2s_buf1_len = 0;
+static int8_t i2s_buf1[4096] = {0};
+static size_t i2s_buf2_len = 0;
+static int8_t i2s_buf2[4096] = {0};
+
+#define I2S_BUF(i) ((i == 1) ? i2s_buf1 : i2s_buf2)
+#define I2S_BUF_LEN(i) ((i == 1) ? i2s_buf1_len : i2s_buf2_len)
 
 static i2s_std_config_t std_cfg = {
     .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(48000),
