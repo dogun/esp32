@@ -135,12 +135,12 @@ void send_data(char *str) {
 	HAL_UART_Transmit(&huart2, (uint8_t*) str, strlen(str), 1000);
 }
 
-uint32_t get_bat_vol() { //满量程 3.3/0.6
+uint32_t get_bat_vol() { //满量程 3.12/0.6
 	HAL_ADC_Start(&hadc);
-	HAL_ADC_PollForConversion(&hadc, 200);
+	HAL_ADC_PollForConversion(&hadc, 1000);
 	uint32_t vol = HAL_ADC_GetValue(&hadc);
 	HAL_ADC_Stop(&hadc);
-	return ((100 * vol / 4095) * 330 / 6);
+	return ((100 * vol / 4096) * 312 / 6);
 }
 
 int opened = 0;
