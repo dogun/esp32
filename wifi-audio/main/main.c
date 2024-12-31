@@ -25,33 +25,42 @@
 
 #define SETTING_PIN GPIO_NUM_33
 
-static SemaphoreHandle_t i2s_sem;
+static SemaphoreHandle_t i2s_sem[3];
 static const char *TAG = "wifi-audio";
 
 static void i2s_write_task(void *pvParameters) {
-	while (1) {
-		xSemaphoreTake(i2s_sem, portMAX_DELAY);
-		  //_apply_biquads_r(i2s_buf, i2s_buf, len / sizeof(int32_t));
-		  //_apply_biquads_l(i2s_buf, i2s_buf, len / sizeof(int32_t));
-		  int w_size = i2s_write(i2s_buf_len);
-		  if (w_size != i2s_buf_len) {
-			ESP_LOGE(TAG, "i2s write failed: errno %d, size %d", errno, w_size);
-		  }
-	}
-	vTaskDelete(NULL);
+  int i = -1;
+  while (1) {
+    i += 1;
+    if (i > 2)
+      i = 0;
+    xSemaphoreTake(i2s_sem[i], portMAX_DELAY);
+    //_apply_biquads_r(i2s_buf, i2s_buf, len / sizeof(int32_t));
+    //_apply_biquads_l(i2s_buf, i2s_buf, len / sizeof(int32_t));
+    int w_size = i2s_write(i);
+    xSemaphoreTake(i2s_sem[i], portMAX_DELAY);
+    if (w_size != i2s_buf[i].len) {
+      ESP_LOGE(TAG, "i2s write failed: errno %d, size %d", errno, w_size);
+    }
+  }
+  vTaskDelete(NULL);
 }
 
 static void do_retransmit(const int sock) {
   int len;
+  int i = -1;
   do {
-    len = recv(sock, i2s_buf, sizeof(i2s_buf), 0);
+    i += 1;
+    if (i > 2)
+      i = 0;
+    xSemaphoreTake(i2s_sem[i], portMAX_DELAY);
+    len = recv(sock, i2s_buf[i].buf, sizeof(i2s_buf[i].buf), 0);
+    i2s_buf[i].len = len;
+    xSemaphoreGive(i2s_sem[i]);
     if (len < 0) {
       ESP_LOGE(TAG, "Error occurred during receiving: errno %d", errno);
     } else if (len == 0) {
       ESP_LOGW(TAG, "Connection closed");
-    } else {
-      //ESP_LOGI(TAG, "Received %d bytes", len);
-    	xSemaphoreGive(i2s_sem);
     }
   } while (len > 0);
 }
@@ -140,6 +149,23 @@ CLEAN_UP:
   vTaskDelete(NULL);
 }
 
+static void i2s_read_task(void *pvParameters) {
+  int i = -1;
+  while (1) {
+    i += 1;
+    if (i > 2)
+      i = 0;
+    xSemaphoreTake(i2s_sem[i], portMAX_DELAY);
+    int r_size = i2s_read(i);
+    i2s_buf[i].len = r_size;
+    xSemaphoreTake(i2s_sem[i], portMAX_DELAY);
+    if (r_size < 0) {
+      ESP_LOGE(TAG, "i2s read failed: errno %d, size %d", errno, r_size);
+    }
+  }
+  vTaskDelete(NULL);
+}
+
 static void tcp_client_task(void *pvParameters) {
   char host_ip[] = "192.168.4.1";
   int port = 12345;
@@ -171,20 +197,21 @@ static void tcp_client_task(void *pvParameters) {
     } else {
       ESP_LOGI(TAG, "Successfully connected");
 
+      int i = -1;
       while (1) {
-        int r_size = i2s_read();
-        if (r_size <= 0) {
-          ESP_LOGE(TAG, "i2s read error: %d %d", r_size, errno);
-          continue;
-        }
-        int err = send(sock, i2s_buf, r_size, 0);
+        i += 1;
+        if (i > 2)
+          i = 0;
+        xSemaphoreTake(i2s_sem[i], portMAX_DELAY);
+        int err = send(sock, i2s_buf[i].buf, i2s_buf[i].len, 0);
+        xSemaphoreGive(i2s_sem[i]);
         if (err < 0) {
           ESP_LOGE(TAG,
                    "Error occurred during sending: errno %d, len %d, sent %d",
-                   errno, r_size, err);
+                   errno, i2s_buf[i].len, err);
           continue;
         }
-        //ESP_LOGI(TAG, "sent: %d", r_size);
+        // ESP_LOGI(TAG, "sent: %d", r_size);
       }
     }
 
@@ -198,7 +225,9 @@ static void tcp_client_task(void *pvParameters) {
 }
 
 void app_main(void) {
-	i2s_sem = xSemaphoreCreateBinary();
+  i2s_sem[0] = xSemaphoreCreateBinary();
+  i2s_sem[1] = xSemaphoreCreateBinary();
+  i2s_sem[2] = xSemaphoreCreateBinary();
 
   gpio_reset_pin(SETTING_PIN);
   gpio_set_direction(SETTING_PIN, GPIO_MODE_INPUT);
@@ -217,18 +246,20 @@ void app_main(void) {
   init_wifi();
 
   if (SERVER_MODE == 0) {
+	gpio_set_level(GPIO_NUM_18, 1);
+    xTaskCreatePinnedToCore(i2s_read_task, "i2s_read", 4096, NULL, 5, NULL, 1);
     xTaskCreatePinnedToCore(tcp_client_task, "tcp_client", 4096, NULL, 5, NULL,
-                            1);
-    gpio_set_level(GPIO_NUM_18, 1);
+                            0);
   } else {
     save_config(CONFIG_SSID, "");
     save_config(CONFIG_PASSWORD, "");
     save_config(CONFIG_UID, "");
     load_eq();
-    xTaskCreatePinnedToCore(i2s_write_task, "i2s_write", 4096, NULL, 5, NULL,
-                                1);
     xTaskCreatePinnedToCore(tcp_server_task, "tcp_server", 4096, NULL, 5, NULL,
                             0);
+    xTaskCreatePinnedToCore(i2s_write_task, "i2s_write", 4096, NULL, 5, NULL,
+                            1);
+    vTaskDelay(500 / portTICK_PERIOD_MS);
     gpio_set_level(GPIO_NUM_17, 1);
     gpio_set_level(GPIO_NUM_16, 0);
   }
@@ -245,6 +276,6 @@ void app_main(void) {
     } else {
       run_wifi(SERVER_MODE);
     }
-    sleep(1);
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }

@@ -24,15 +24,12 @@
 static i2s_chan_handle_t tx_chan;
 static i2s_chan_handle_t rx_chan;
 
-static uint8_t buf_flag = 0;
+typedef struct I2S_BUF {
+	int8_t buf[2048];
+	size_t len;
+} i2s_buf_t;
 
-static size_t i2s_buf1_len = 0;
-static int8_t i2s_buf1[4096] = {0};
-static size_t i2s_buf2_len = 0;
-static int8_t i2s_buf2[4096] = {0};
-
-#define I2S_BUF(i) ((i == 1) ? i2s_buf1 : i2s_buf2)
-#define I2S_BUF_LEN(i) ((i == 1) ? i2s_buf1_len : i2s_buf2_len)
+i2s_buf_t i2s_buf[3];
 
 static i2s_std_config_t std_cfg = {
     .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(48000),
@@ -64,10 +61,10 @@ static void init_i2s_read() {
   ESP_LOGI(I2S_TAG, "i2s read inited");
 }
 
-static int i2s_read() {
+static int i2s_read(int i) {
   int r_bytes = 0;
 
-  if (i2s_channel_read(rx_chan, i2s_buf, sizeof(i2s_buf), (size_t *)&r_bytes,
+  if (i2s_channel_read(rx_chan, i2s_buf[i].buf, sizeof(i2s_buf[i].buf), (size_t *)&r_bytes,
                        1000) != ESP_OK) {
     r_bytes = -1;
   }
@@ -83,9 +80,9 @@ static void i2s_write_init() {
   ESP_LOGI(I2S_TAG, "i2s write inited");
 }
 
-static int i2s_write(int len) {
+static int i2s_write(int i) {
   int w_size = 0;
-  if (i2s_channel_write(tx_chan, i2s_buf, len, (size_t *)&w_size, 1000) !=
+  if (i2s_channel_write(tx_chan, i2s_buf[i].buf, i2s_buf[i].len, (size_t *)&w_size, 1000) !=
       ESP_OK) {
     w_size = -1;
   }
