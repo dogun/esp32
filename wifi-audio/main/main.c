@@ -21,47 +21,60 @@
 #include "i2s.h"
 #include "wifi.h"
 
-#define SERVER_MODE 1
+#define SERVER_MODE 0
 
 #define SETTING_PIN GPIO_NUM_33
 
-static SemaphoreHandle_t i2s_sem[3];
+static SemaphoreHandle_t i2s_sem[I2S_BUF_CNT];
 static const char *TAG = "wifi-audio";
 
+static int tcp_total_len = 0;
+static int i2s_total_len = 0;
+
 static void i2s_write_task(void *pvParameters) {
-  int i = -1;
+  int i = 0;
   while (1) {
-    i += 1;
-    if (i > 2)
+    if (i >= I2S_BUF_CNT)
       i = 0;
     xSemaphoreTake(i2s_sem[i], portMAX_DELAY);
     //_apply_biquads_r(i2s_buf, i2s_buf, len / sizeof(int32_t));
     //_apply_biquads_l(i2s_buf, i2s_buf, len / sizeof(int32_t));
-    int w_size = i2s_write(i);
-    xSemaphoreTake(i2s_sem[i], portMAX_DELAY);
-    if (w_size != i2s_buf[i].len) {
-      ESP_LOGE(TAG, "i2s write failed: errno %d, size %d", errno, w_size);
-    }
+    //ESP_LOGI(TAG, "i2s write: %d %d", i2s_buf[i].len, i);
+    if (i2s_buf[i].len <= 0) {
+		vTaskDelay(100 / portTICK_PERIOD_MS);
+	}else {
+	    int w_size = i2s_write(i);
+	    i2s_total_len += w_size;
+	    int len = i2s_buf[i].len;
+	    if (w_size != len) {
+	      ESP_LOGE(TAG, "i2s write failed: errno %d, sent size %d, len %d", errno, w_size, i2s_buf[i].len);
+	    }
+	}
+    xSemaphoreGive(i2s_sem[i]);
+
+    i++;
   }
   vTaskDelete(NULL);
 }
 
 static void do_retransmit(const int sock) {
   int len;
-  int i = -1;
+  int i = 0;
   do {
-    i += 1;
-    if (i > 2)
+    if (i >= I2S_BUF_CNT)
       i = 0;
     xSemaphoreTake(i2s_sem[i], portMAX_DELAY);
-    len = recv(sock, i2s_buf[i].buf, sizeof(i2s_buf[i].buf), 0);
+    len = recv(sock, i2s_buf[i].buf, I2S_BUF_SIZE, 0);
     i2s_buf[i].len = len;
+    //ESP_LOGI(TAG, "tcp read: %d %d", i2s_buf[i].len, i);
     xSemaphoreGive(i2s_sem[i]);
+    tcp_total_len += len;
     if (len < 0) {
       ESP_LOGE(TAG, "Error occurred during receiving: errno %d", errno);
     } else if (len == 0) {
       ESP_LOGW(TAG, "Connection closed");
     }
+    i++;
   } while (len > 0);
 }
 
@@ -80,10 +93,10 @@ static void tcp_server_task(void *pvParameters) {
   char addr_str[128];
 
   int port = 12345;
-  int keepAlive = 1;
-  int keepIdle = 10;
-  int keepInterval = 10;
-  int keepCount = 10;
+  //int keepAlive = 1;
+  //int keepIdle = 10;
+  //int keepInterval = 10;
+  //int keepCount = 10;
   struct sockaddr_storage dest_addr;
 
   struct sockaddr_in *dest_addr_ip4 = (struct sockaddr_in *)&dest_addr;
@@ -126,10 +139,10 @@ static void tcp_server_task(void *pvParameters) {
     }
 
     // Set tcp keepalive option
-    setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &keepAlive, sizeof(int));
-    setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &keepIdle, sizeof(int));
-    setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &keepInterval, sizeof(int));
-    setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &keepCount, sizeof(int));
+    //setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &keepAlive, sizeof(int));
+    //setsockopt(sock, IPPROTO_TCP, TCP_KEEPIDLE, &keepIdle, sizeof(int));
+    //setsockopt(sock, IPPROTO_TCP, TCP_KEEPINTVL, &keepInterval, sizeof(int));
+    //setsockopt(sock, IPPROTO_TCP, TCP_KEEPCNT, &keepCount, sizeof(int));
     // Convert ip address to string
     if (source_addr.ss_family == PF_INET) {
       inet_ntoa_r(((struct sockaddr_in *)&source_addr)->sin_addr, addr_str,
@@ -150,18 +163,20 @@ CLEAN_UP:
 }
 
 static void i2s_read_task(void *pvParameters) {
-  int i = -1;
+  int i = 0;
   while (1) {
-    i += 1;
-    if (i > 2)
+    if (i >= I2S_BUF_CNT)
       i = 0;
     xSemaphoreTake(i2s_sem[i], portMAX_DELAY);
     int r_size = i2s_read(i);
+    i2s_total_len += r_size;
     i2s_buf[i].len = r_size;
-    xSemaphoreTake(i2s_sem[i], portMAX_DELAY);
+    //ESP_LOGI(TAG, "i2s read: %d %d", i2s_buf[i].len, i);
+    xSemaphoreGive(i2s_sem[i]);
     if (r_size < 0) {
       ESP_LOGE(TAG, "i2s read failed: errno %d, size %d", errno, r_size);
     }
+    i++;
   }
   vTaskDelete(NULL);
 }
@@ -197,20 +212,25 @@ static void tcp_client_task(void *pvParameters) {
     } else {
       ESP_LOGI(TAG, "Successfully connected");
 
-      int i = -1;
+      int i = 0;
       while (1) {
-        i += 1;
-        if (i > 2)
+        if (i >= I2S_BUF_CNT)
           i = 0;
         xSemaphoreTake(i2s_sem[i], portMAX_DELAY);
+        //ESP_LOGI(TAG, "tcp write: %d %d", i2s_buf[i].len, i);
         int err = send(sock, i2s_buf[i].buf, i2s_buf[i].len, 0);
+        //ESP_LOGI(TAG, " sent: %d", err);
+        tcp_total_len += err;
         xSemaphoreGive(i2s_sem[i]);
         if (err < 0) {
           ESP_LOGE(TAG,
                    "Error occurred during sending: errno %d, len %d, sent %d",
                    errno, i2s_buf[i].len, err);
-          continue;
-        }
+          break;
+        } else if(err < i2s_buf[i].len) {
+			ESP_LOGE(TAG, "tcp write error: %d %d", err, i2s_buf[i].len);
+		}
+        i++;
         // ESP_LOGI(TAG, "sent: %d", r_size);
       }
     }
@@ -225,10 +245,10 @@ static void tcp_client_task(void *pvParameters) {
 }
 
 void app_main(void) {
-  i2s_sem[0] = xSemaphoreCreateBinary();
-  i2s_sem[1] = xSemaphoreCreateBinary();
-  i2s_sem[2] = xSemaphoreCreateBinary();
-
+  int j = 0;
+  for (j = 0; j < I2S_BUF_CNT; ++j) { 
+  	i2s_sem[j] = xSemaphoreCreateBinary();
+  }
   gpio_reset_pin(SETTING_PIN);
   gpio_set_direction(SETTING_PIN, GPIO_MODE_INPUT);
 
@@ -263,6 +283,13 @@ void app_main(void) {
     gpio_set_level(GPIO_NUM_17, 1);
     gpio_set_level(GPIO_NUM_16, 0);
   }
+  
+  for (j = 0; j < I2S_BUF_CNT; ++j) { 
+  	xSemaphoreGive(i2s_sem[j]);
+  }
+  
+  int tcp_last_len = 0;
+  int i2s_last_len = 0;
   int reconfiging = 0;
   while (true) {
     int setting = gpio_get_level(SETTING_PIN);
@@ -276,6 +303,15 @@ void app_main(void) {
     } else {
       run_wifi(SERVER_MODE);
     }
+    int tcp_t = tcp_total_len;
+    int tcp_p = tcp_t - tcp_last_len;
+    tcp_last_len = tcp_t;
+    
+    int i2s_t = i2s_total_len;
+    int i2s_p = i2s_t - i2s_last_len;
+    i2s_last_len = i2s_t;
+    
+    ESP_LOGE(TAG, "%d %d", tcp_p, i2s_p);
     vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }

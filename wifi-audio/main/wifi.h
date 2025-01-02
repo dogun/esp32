@@ -156,6 +156,14 @@ void _wifi_init_sta(void) {
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
   ESP_ERROR_CHECK(esp_wifi_start());
 
+	int8_t p;
+	esp_wifi_get_max_tx_power(&p);
+	ESP_LOGI(WIFI_TAG, "1. max power: %d", p);
+	esp_wifi_set_max_tx_power(80);
+  	esp_wifi_get_max_tx_power(&p);
+	ESP_LOGI(WIFI_TAG, "2. max power: %d", p);
+	
+
   ESP_LOGI(WIFI_TAG, "wifi_init_sta finished.");
   wifi_inited = 1;
 }

@@ -21,15 +21,18 @@
 
 #define I2S_TAG "i2s"
 
-static i2s_chan_handle_t tx_chan;
-static i2s_chan_handle_t rx_chan;
+#define I2S_BUF_SIZE 2048
+#define I2S_BUF_CNT 4
 
 typedef struct I2S_BUF {
-	int8_t buf[2048];
+	int8_t buf[I2S_BUF_SIZE];
 	size_t len;
 } i2s_buf_t;
 
-i2s_buf_t i2s_buf[3];
+i2s_buf_t i2s_buf[I2S_BUF_CNT];
+
+static i2s_chan_handle_t tx_chan;
+static i2s_chan_handle_t rx_chan;
 
 static i2s_std_config_t std_cfg = {
     .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(48000),
@@ -82,6 +85,7 @@ static void i2s_write_init() {
 
 static int i2s_write(int i) {
   int w_size = 0;
+  if (i2s_buf[i].len == 0) return w_size;
   if (i2s_channel_write(tx_chan, i2s_buf[i].buf, i2s_buf[i].len, (size_t *)&w_size, 1000) !=
       ESP_OK) {
     w_size = -1;
