@@ -10,7 +10,6 @@
 
 #include "config.h"
 #include "config_store.h"
-#include "http_op.h"
 #include <driver/gpio.h>
 #include <esp_event.h>
 #include <esp_log.h>
@@ -28,7 +27,6 @@
 typedef enum {
   NOTHING = 0,
   AP_OK,
-  PASS_OK,
   STA_ING,
   STA_OK,
   STA_ERROR,
@@ -60,45 +58,23 @@ void _wifi_event_handler(void *arg, esp_event_base_t event_base,
     wifi_status = STA_ERROR;
   } else if (event_base == WIFI_EVENT &&
              event_id == WIFI_EVENT_STA_DISCONNECTED) {
-    if (s_retry_num < ESP_WIFI_MAXIMUM_RETRY) {
       esp_wifi_connect();
       s_retry_num++;
       ESP_LOGI(WIFI_TAG, "retry to connect to the AP");
-    } else {
-      s_retry_num = 0;
-      wifi_status = STA_ERROR;
-      ESP_LOGI(WIFI_TAG, "connect to the AP fail");
-    }
   } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
     ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
     ESP_LOGI(WIFI_TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
     s_retry_num = 0;
     wifi_status = STA_OK;
-    save_config(CONFIG_STATUS, "STA_OK");
   } else {
     ESP_LOGI(WIFI_TAG, "event_id: %d", (int)event_id);
   }
 }
 
-static char sta_ssid[CONFIG_SSID_LEN];
-static char sta_password[CONFIG_PASS_LEN];
-static char sta_uid[CONFIG_SSID_LEN];
-
-void _pass_event_handler(char *ssid, char *pass, char *uid) {
-  strcpy(sta_ssid, ssid);
-  strcpy(sta_password, pass);
-  strcpy(sta_uid, uid);
-  save_config(CONFIG_SSID, sta_ssid);
-  save_config(CONFIG_PASSWORD, sta_password);
-  save_config(CONFIG_UID, sta_uid);
-
-  wifi_status = PASS_OK;
-}
-
 static esp_event_handler_instance_t instance_any_id;
 static esp_event_handler_instance_t instance_got_ip;
 static esp_netif_t *nf;
-void _wifi_init_ap(int server_only) {
+void _wifi_init_ap() {
   ESP_ERROR_CHECK(esp_netif_init());
   ESP_ERROR_CHECK(esp_event_loop_create_default());
   nf = esp_netif_create_default_wifi_ap();
@@ -124,9 +100,6 @@ void _wifi_init_ap(int server_only) {
   ESP_ERROR_CHECK(esp_wifi_start());
   ESP_LOGI(WIFI_TAG, "wifi init ssid:(%s), pass:(%s)", wifi_config.ap.ssid,
            wifi_config.ap.password);
-  if (!server_only) {
-    start_webserver(&_pass_event_handler);
-  }
   wifi_inited = 1;
 }
 
@@ -149,20 +122,19 @@ void _wifi_init_sta(void) {
               .threshold.authmode = WIFI_AUTH_WPA_PSK,
           },
   };
-  strcpy((char *)wifi_config.sta.ssid, sta_ssid);
-  strcpy((char *)wifi_config.sta.password, sta_password);
+  strcpy((char *)wifi_config.sta.ssid, AP_NAME);
+  strcpy((char *)wifi_config.sta.password, AP_PASSWORD);
 
   ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
   ESP_ERROR_CHECK(esp_wifi_start());
 
-	int8_t p;
-	esp_wifi_get_max_tx_power(&p);
-	ESP_LOGI(WIFI_TAG, "1. max power: %d", p);
-	esp_wifi_set_max_tx_power(80);
-  	esp_wifi_get_max_tx_power(&p);
-	ESP_LOGI(WIFI_TAG, "2. max power: %d", p);
-	
+  int8_t p;
+  esp_wifi_get_max_tx_power(&p);
+  ESP_LOGI(WIFI_TAG, "1. max power: %d", p);
+  esp_wifi_set_max_tx_power(80);
+  esp_wifi_get_max_tx_power(&p);
+  ESP_LOGI(WIFI_TAG, "2. max power: %d", p);
 
   ESP_LOGI(WIFI_TAG, "wifi_init_sta finished.");
   wifi_inited = 1;
@@ -171,7 +143,6 @@ void _wifi_init_sta(void) {
 void _deinit() {
   if (wifi_inited == 0)
     return;
-  stop_webserver();
   esp_wifi_stop();
   esp_wifi_deinit();
   ESP_ERROR_CHECK(esp_event_handler_instance_unregister(
@@ -184,38 +155,25 @@ void _deinit() {
   wifi_inited = 0;
 }
 
-void init_wifi() {
+static int _server_mode;
+void init_wifi(int server) {
   init_fs();
-  bzero(sta_ssid, sizeof(sta_ssid));
-  bzero(sta_password, sizeof(sta_password));
-  bzero(sta_uid, sizeof(sta_uid));
-  read_config(CONFIG_SSID, sta_ssid, sizeof(sta_ssid));
-  read_config(CONFIG_PASSWORD, sta_password, sizeof(sta_password));
-  read_config(CONFIG_UID, sta_uid, sizeof(sta_uid));
-
-  char _status[8];
-  bzero(_status, 8);
-  read_config(CONFIG_STATUS, _status, 8);
-  if (strcmp(_status, "STA_OK") == 0 && strlen(sta_ssid) > 0 &&
-      strlen(sta_password) > 0) {
-    ESP_LOGI(WIFI_TAG, "sta_ok, ssid: %s, pass: %s, uid: %s", sta_ssid,
-             sta_password, sta_uid);
-    wifi_status = PASS_OK;
-  }
+  _server_mode = server;
 }
 
 static int log_wait = 0;
-void run_wifi(int server_only) {
+void run_wifi() {
   if (log_wait == 0)
     ESP_LOGI(WIFI_TAG, "status now: %d", wifi_status);
-  if (wifi_status == NOTHING) {
-    _wifi_init_ap(server_only);
-    ESP_LOGI(WIFI_TAG, "AP_OK, http server started: %d", 1 - server_only);
+  if (wifi_status == NOTHING && _server_mode == 1) {
+    _deinit();
+    _wifi_init_ap();
+    ESP_LOGI(WIFI_TAG, "AP_OK, http server started");
     wifi_status = AP_OK;
   } else if (wifi_status == AP_OK) {
-    if (log_wait == 0 && !server_only)
-      ESP_LOGI(WIFI_TAG, "wait password");
-  } else if (wifi_status == PASS_OK) {
+    if (log_wait == 0)
+      ESP_LOGI(WIFI_TAG, "AP_OK");
+  } else if (wifi_status == NOTHING && _server_mode == 0) {
     _deinit();
     _wifi_init_sta();
     wifi_status = STA_ING;
@@ -233,13 +191,6 @@ void run_wifi(int server_only) {
   log_wait++;
   if (log_wait > 15)
     log_wait = 0;
-}
-
-void reconfig_wifi() {
-  ESP_LOGI(WIFI_TAG, "reconfig");
-  save_config(CONFIG_STATUS, "NOTHING");
-  wifi_status = NOTHING;
-  _deinit();
 }
 
 #endif /* MAIN_WIFI_H_ */

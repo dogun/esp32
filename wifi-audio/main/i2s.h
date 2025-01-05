@@ -16,23 +16,76 @@
 #include "freertos/task.h"
 #include "hal/i2s_types.h"
 #include "sdkconfig.h"
+#include <stddef.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define I2S_TAG "i2s"
 
 #define I2S_BUF_SIZE 2048
-#define I2S_BUF_CNT 4
+#define I2S_BUF_CNT 1
 
 typedef struct I2S_BUF {
-	int8_t buf[I2S_BUF_SIZE];
 	size_t len;
+	uint32_t index;
+	int8_t buf[I2S_BUF_SIZE];
 } i2s_buf_t;
 
 i2s_buf_t i2s_buf[I2S_BUF_CNT];
 
 static i2s_chan_handle_t tx_chan;
 static i2s_chan_handle_t rx_chan;
+
+#define B24 0x7FFFFF
+#define B16 0x7FFF
+static float B2416 = 256;
+
+static size_t _index = 0;
+
+static void print_buf(uint8_t i, uint8_t type) {
+	int* bf = (int*)i2s_buf[i].buf;
+	size_t len = i2s_buf[i].len / 4;
+	size_t j = 0;
+	ESP_LOGE(I2S_TAG, "(%d) (%d) start print(%d)", type, (int)i2s_buf[i].len, (int)i2s_buf[i].index);
+	for (j = 0; j < len; ++j) {
+		ESP_LOGE(I2S_TAG, "%d", bf[j]);
+	}
+	ESP_LOGE(I2S_TAG, "(%d) end print (%d)", type, (int)i2s_buf[i].index);
+}
+
+static void compress_buf(uint8_t i) {
+	int32_t* buf = (int32_t*)i2s_buf[i].buf;
+	size_t len = i2s_buf[i].len / 4;
+	uint32_t j;
+	for (j = 0; j < len; j += 2) {
+		int32_t data1 = (buf[j] << 1) >> 8; //i2s标准，右7位为空
+		int32_t data2 = (buf[j + 1] << 1) >> 8;
+		float fdata1 = (float)data1 / B2416;
+		float fdata2 = (float)data2 / B2416;
+		buf[j / 2] = ((int)fdata1 << 16) | ((int16_t)fdata2 & 0xFFFF);
+	}
+	i2s_buf[i].len /= 2;
+}
+
+static void decompress_buf(uint8_t i) {
+	int8_t _buf[I2S_BUF_SIZE];
+	memcpy(_buf, i2s_buf[i].buf, I2S_BUF_SIZE);
+	int32_t* buf = (int32_t*)_buf;
+	int32_t* i2s_b = (int32_t*)i2s_buf[i].buf;
+	size_t len = i2s_buf[i].len / 4;
+	uint32_t j;
+	for (j = 0; j < len; j++) {
+		int32_t data1 = (buf[j] >> 16);
+		int32_t data2 = (buf[j] << 16) >> 16;
+		float fdata1 = (float)data1 * B2416;
+		float fdata2 = (float)data2 * B2416;
+		i2s_b[j * 2] = ((int)fdata1 << 7) & 0x7FFFFFFF;
+		i2s_b[j * 2 + 1] = ((int)fdata2 << 7) & 0x7FFFFFFF;
+	}
+	i2s_buf[i].len *= 2;
+}
+
 
 static i2s_std_config_t std_cfg = {
     .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(48000),
@@ -64,13 +117,44 @@ static void init_i2s_read() {
   ESP_LOGI(I2S_TAG, "i2s read inited");
 }
 
-static int i2s_read(int i) {
-  int r_bytes = 0;
+static size_t i2s_read(uint8_t i) {
+  size_t r_bytes = 0;
 
   if (i2s_channel_read(rx_chan, i2s_buf[i].buf, sizeof(i2s_buf[i].buf), (size_t *)&r_bytes,
                        1000) != ESP_OK) {
     r_bytes = -1;
   }
+  i2s_buf[i].index = _index++;
+  i2s_buf[i].len = r_bytes;
+  if (_index > 100000000) _index = 0;
+  
+  //MOCK DATA
+  /*
+  int* md = (int*)i2s_buf[i].buf;
+  int j = 0;
+md[j++] = 2144704384;
+md[j++] = 2147345536;
+md[j++] = 301056;
+md[j++] = 2144376448;
+md[j++] = 1913088;
+md[j++] = 678784;
+md[j++] = 2147167232;
+md[j++] = 2146136960;
+md[j++] = 2500480;
+md[j++] = 1100544;
+md[j++] = 1632256;
+md[j++] = 2145201280;
+md[j++] = 2146752512;
+md[j++] = 2147283200;
+md[j++] = 1207936;
+md[j++] = 1664256;
+md[j++] = 2146590208;
+md[j++] = 1382016;
+md[j++] = 848384;
+md[j++] = 2146185984;
+  r_bytes = j * 4;
+  i2s_buf[i].len = r_bytes;
+*/
   return r_bytes;
 }
 
@@ -83,15 +167,23 @@ static void i2s_write_init() {
   ESP_LOGI(I2S_TAG, "i2s write inited");
 }
 
-static int i2s_write(int i) {
-  int w_size = 0;
+static size_t i2s_write(uint8_t i) {
+  size_t w_size = 0;
+  size_t _len = 0;
   if (i2s_buf[i].len == 0) return w_size;
-  if (i2s_channel_write(tx_chan, i2s_buf[i].buf, i2s_buf[i].len, (size_t *)&w_size, 1000) !=
-      ESP_OK) {
-    w_size = -1;
+  while (1) {
+	  if (i2s_channel_write(tx_chan, i2s_buf[i].buf + _len, i2s_buf[i].len - _len, (size_t *)&w_size, 1000) !=
+	      ESP_OK) {
+	    w_size = -1;
+	    break;
+	  }
+	  _len += w_size;
+	  if (_len == i2s_buf[i].len) {
+		  break;
+	  }
   }
-  // ESP_LOGI(I2S_TAG, "write: %d", w_size);
-  return w_size;
+  _index = i2s_buf[i].index;
+  return _len;
 }
 
 #endif /* MAIN_I2S_H_ */
