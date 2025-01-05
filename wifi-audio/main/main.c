@@ -22,46 +22,12 @@
 #include "portmacro.h"
 #include "wifi.h"
 
-#define SERVER_MODE 0
-
-static SemaphoreHandle_t i2s_sem[I2S_BUF_CNT];
-static SemaphoreHandle_t tcp_sem[I2S_BUF_CNT];
+#define SERVER_MODE 1
 
 static const char *TAG = "wifi-audio";
 
 static size_t tcp_total_len = 0;
 static size_t i2s_total_len = 0;
-
-static void i2s_write_task(void *pvParameters) {
-  uint8_t i = 0;
-  size_t idx = 0;
-  while (1) {
-    if (i >= I2S_BUF_CNT)
-      i = 0;
-    xSemaphoreTake(i2s_sem[i], portMAX_DELAY);
-    //_apply_biquads_r(i2s_buf, i2s_buf, len / sizeof(int32_t));
-    //_apply_biquads_l(i2s_buf, i2s_buf, len / sizeof(int32_t));
-    if (i2s_buf[i].len <= 0) { // 还未收到数据
-      vTaskDelay(100 / portTICK_PERIOD_MS);
-    } else {
-      size_t w_size = i2s_write(i);
-      i2s_total_len += i2s_buf[i].len;
-      size_t len = i2s_buf[i].len;
-      if (w_size != len) {
-        ESP_LOGE(TAG, "i2s write failed: errno %d, sent size %d, len %d", errno,
-                 w_size, i2s_buf[i].len);
-      }
-      if (i2s_buf[i].index - idx != 1) {
-        ESP_LOGE(TAG, "=====================%d %d", idx, (int)i2s_buf[i].index);
-      }
-      idx = i2s_buf[i].index;
-    }
-    xSemaphoreGive(tcp_sem[i]); // 可以去讀網絡了
-
-    i++;
-  }
-  vTaskDelete(NULL);
-}
 
 static ssize_t read_tcp(const int sock, void *buf, size_t len) {
   size_t _len = 0;
@@ -79,30 +45,28 @@ static ssize_t read_tcp(const int sock, void *buf, size_t len) {
 }
 
 static void do_retransmit(const int sock) {
-  uint8_t i = 0;
   ssize_t err = 0;
   while (1) {
-    if (i >= I2S_BUF_CNT)
-      i = 0;
-    xSemaphoreTake(tcp_sem[i], portMAX_DELAY);
-    err = read_tcp(sock, &i2s_buf[i].len, sizeof(size_t));
+    err = read_tcp(sock, &i2s_buf.len, sizeof(size_t));
     if (err > 0) {
-      err = read_tcp(sock, &i2s_buf[i].index, sizeof(uint32_t));
+      err = read_tcp(sock, &i2s_buf.index, sizeof(uint32_t));
       if (err > 0) {
-        err = read_tcp(sock, i2s_buf[i].buf, i2s_buf[i].len);
+        err = read_tcp(sock, i2s_buf.buf, i2s_buf.len);
       }
     }
     if (err <= 0) {
       ESP_LOGE(TAG, "read tcp error: %d %d", errno, err);
-      xSemaphoreGive(i2s_sem[i]); // 也釋放i2s sem
       break;
     }
-    tcp_total_len += i2s_buf[i].len;
+    tcp_total_len += i2s_buf.len;
     // print_buf(i, 3);
-    decompress_buf(i);
+    decompress_buf();
     // print_buf(i, 4);
-    xSemaphoreGive(i2s_sem[i]);
-    i++;
+    ssize_t w_size = i2s_write();
+    if (w_size < 0) {
+      ESP_LOGE(TAG, "write i2s error: %d %d", errno, err);
+    }
+    i2s_total_len += i2s_buf.len;
   }
 }
 
@@ -186,28 +150,6 @@ CLEAN_UP:
   vTaskDelete(NULL);
 }
 
-static void i2s_read_task(void *pvParameters) {
-  uint8_t i = 0;
-  while (1) {
-    if (i >= I2S_BUF_CNT)
-      i = 0;
-    xSemaphoreTake(i2s_sem[i], portMAX_DELAY);
-    size_t r_size = i2s_read(i);
-    i2s_total_len += r_size;
-    // print_buf(i, 0);
-    compress_buf(i);
-    // print_buf(i, 1);
-    // decompress_buf(i);
-    // compress_buf(i, 2);
-    xSemaphoreGive(tcp_sem[i]); // 可以去寫入網絡了
-    if (r_size <= 0) {
-      ESP_LOGE(TAG, "i2s read failed: errno %d, size %d", errno, r_size);
-    }
-    i++;
-  }
-  vTaskDelete(NULL);
-}
-
 static ssize_t send_tcp(int sock, void *buf, size_t len) {
   size_t _len = 0;
   ssize_t err;
@@ -250,7 +192,7 @@ static void tcp_client_task(void *pvParameters) {
       ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
       break;
     }
-    
+
     // Set timeout
     struct timeval timeout;
     timeout.tv_sec = 3;
@@ -264,28 +206,21 @@ static void tcp_client_task(void *pvParameters) {
     } else {
       ESP_LOGI(TAG, "Successfully connected");
 
-      uint8_t i = 0;
       while (1) {
-        if (i >= I2S_BUF_CNT)
-          i = 0;
-        xSemaphoreTake(tcp_sem[i], portMAX_DELAY);
-        if (i2s_buf[i].len == 0) { // i2s還未準備好
-          vTaskDelay(100 / portTICK_PERIOD_MS);
-        } else {
-          ssize_t err = send_tcp(sock, &i2s_buf[i], sizeof(i2s_buf[i]));
-          tcp_total_len += (err - sizeof(size_t) - sizeof(uint32_t));
-          if (err <= 0) {
-            ESP_LOGE(TAG,
-                     "Error occurred during sending: errno %d, len %d, sent %d",
-                     errno, i2s_buf[i].len, err);
-            xSemaphoreGive(i2s_sem[i]); // 可以繼續讀i2s了
-            break;
-          } else if (err < i2s_buf[i].len) {
-            ESP_LOGE(TAG, "tcp write error: %d %d", err, i2s_buf[i].len);
-          }
+        size_t r_size = i2s_read();
+        i2s_total_len += r_size;
+        // print_buf(i, 0);
+        compress_buf();
+        ssize_t err = send_tcp(sock, &i2s_buf, i2s_buf.len + sizeof(i2s_buf.index) + sizeof(i2s_buf.len));
+        if (err <= 0) {
+          ESP_LOGE(TAG,
+                   "Error occurred during sending: errno %d, len %d, sent %d",
+                   errno, i2s_buf.len, err);
+          break;
+        } else if (err < i2s_buf.len) {
+          ESP_LOGE(TAG, "tcp write error: %d %d", err, i2s_buf.len);
         }
-        xSemaphoreGive(i2s_sem[i]); // 可以繼續讀i2s了
-        i++;
+        tcp_total_len += (err - sizeof(size_t) - sizeof(uint32_t));
       }
     }
 
@@ -299,12 +234,6 @@ static void tcp_client_task(void *pvParameters) {
 }
 
 void app_main(void) {
-  uint8_t j = 0;
-  for (j = 0; j < I2S_BUF_CNT; ++j) {
-    i2s_sem[j] = xSemaphoreCreateBinary();
-    tcp_sem[j] = xSemaphoreCreateBinary();
-  }
-
   gpio_reset_pin(GPIO_NUM_16);
   gpio_set_direction(GPIO_NUM_16, GPIO_MODE_OUTPUT);
   gpio_reset_pin(GPIO_NUM_17);
@@ -320,28 +249,14 @@ void app_main(void) {
 
   if (SERVER_MODE == 0) {
     gpio_set_level(GPIO_NUM_18, 1);
-    xTaskCreatePinnedToCore(i2s_read_task, "i2s_read", 8192, NULL, 5, NULL, 1);
     xTaskCreatePinnedToCore(tcp_client_task, "tcp_client", 8192, NULL, 5, NULL,
-                            0);
-
-    vTaskDelay(500 / portTICK_PERIOD_MS);
-    for (j = 0; j < I2S_BUF_CNT; ++j) {
-      xSemaphoreGive(
-          tcp_sem
-              [j]); // 雖然是i2s讀取再寫入tcp，但是網絡準備好后才進行i2s讀取比較合適
-    }
+                            1);
   } else {
     load_eq();
-    xTaskCreatePinnedToCore(tcp_server_task, "tcp_server", 8192, NULL, 5, NULL,
-                            0);
-    xTaskCreatePinnedToCore(i2s_write_task, "i2s_write", 8192, NULL, 5, NULL,
+    xTaskCreatePinnedToCore(tcp_server_task, "tcp_server", 20480, NULL, 5, NULL,
                             1);
 
     vTaskDelay(500 / portTICK_PERIOD_MS);
-
-    for (j = 0; j < I2S_BUF_CNT; ++j) {
-      xSemaphoreGive(tcp_sem[j]); // 要開始讀取
-    }
 
     gpio_set_level(GPIO_NUM_17, 1);
     gpio_set_level(GPIO_NUM_16, 0);

@@ -24,7 +24,6 @@
 #define I2S_TAG "i2s"
 
 #define I2S_BUF_SIZE 2048
-#define I2S_BUF_CNT 1
 
 typedef struct I2S_BUF {
 	size_t len;
@@ -32,7 +31,7 @@ typedef struct I2S_BUF {
 	int8_t buf[I2S_BUF_SIZE];
 } i2s_buf_t;
 
-i2s_buf_t i2s_buf[I2S_BUF_CNT];
+i2s_buf_t i2s_buf;
 
 static i2s_chan_handle_t tx_chan;
 static i2s_chan_handle_t rx_chan;
@@ -43,20 +42,20 @@ static float B2416 = 256;
 
 static size_t _index = 0;
 
-static void print_buf(uint8_t i, uint8_t type) {
-	int* bf = (int*)i2s_buf[i].buf;
-	size_t len = i2s_buf[i].len / 4;
+static void print_buf(uint8_t type) {
+	int* bf = (int*)i2s_buf.buf;
+	size_t len = i2s_buf.len / 4;
 	size_t j = 0;
-	ESP_LOGE(I2S_TAG, "(%d) (%d) start print(%d)", type, (int)i2s_buf[i].len, (int)i2s_buf[i].index);
+	ESP_LOGE(I2S_TAG, "(%d) (%d) start print(%d)", type, (int)i2s_buf.len, (int)i2s_buf.index);
 	for (j = 0; j < len; ++j) {
 		ESP_LOGE(I2S_TAG, "%d", bf[j]);
 	}
-	ESP_LOGE(I2S_TAG, "(%d) end print (%d)", type, (int)i2s_buf[i].index);
+	ESP_LOGE(I2S_TAG, "(%d) end print (%d)", type, (int)i2s_buf.index);
 }
 
-static void compress_buf(uint8_t i) {
-	int32_t* buf = (int32_t*)i2s_buf[i].buf;
-	size_t len = i2s_buf[i].len / 4;
+static void compress_buf() {
+	int32_t* buf = (int32_t*)i2s_buf.buf;
+	size_t len = i2s_buf.len / 4;
 	uint32_t j;
 	for (j = 0; j < len; j += 2) {
 		int32_t data1 = (buf[j] << 1) >> 8; //i2s标准，右7位为空
@@ -65,15 +64,15 @@ static void compress_buf(uint8_t i) {
 		float fdata2 = (float)data2 / B2416;
 		buf[j / 2] = ((int)fdata1 << 16) | ((int16_t)fdata2 & 0xFFFF);
 	}
-	i2s_buf[i].len /= 2;
+	i2s_buf.len /= 2;
 }
 
-static void decompress_buf(uint8_t i) {
+static void decompress_buf() {
 	int8_t _buf[I2S_BUF_SIZE];
-	memcpy(_buf, i2s_buf[i].buf, I2S_BUF_SIZE);
+	memcpy(_buf, i2s_buf.buf, I2S_BUF_SIZE);
 	int32_t* buf = (int32_t*)_buf;
-	int32_t* i2s_b = (int32_t*)i2s_buf[i].buf;
-	size_t len = i2s_buf[i].len / 4;
+	int32_t* i2s_b = (int32_t*)i2s_buf.buf;
+	size_t len = i2s_buf.len / 4;
 	uint32_t j;
 	for (j = 0; j < len; j++) {
 		int32_t data1 = (buf[j] >> 16);
@@ -83,9 +82,8 @@ static void decompress_buf(uint8_t i) {
 		i2s_b[j * 2] = ((int)fdata1 << 7) & 0x7FFFFFFF;
 		i2s_b[j * 2 + 1] = ((int)fdata2 << 7) & 0x7FFFFFFF;
 	}
-	i2s_buf[i].len *= 2;
+	i2s_buf.len *= 2;
 }
-
 
 static i2s_std_config_t std_cfg = {
     .clk_cfg = I2S_STD_CLK_DEFAULT_CONFIG(48000),
@@ -117,20 +115,24 @@ static void init_i2s_read() {
   ESP_LOGI(I2S_TAG, "i2s read inited");
 }
 
-static size_t i2s_read(uint8_t i) {
+static ssize_t i2s_read() {
   size_t r_bytes = 0;
-
-  if (i2s_channel_read(rx_chan, i2s_buf[i].buf, sizeof(i2s_buf[i].buf), (size_t *)&r_bytes,
-                       1000) != ESP_OK) {
-    r_bytes = -1;
+  size_t _len = 0;
+  while (1) {
+	  if (i2s_channel_read(rx_chan, i2s_buf.buf + _len, I2S_BUF_SIZE - _len, (size_t *)&r_bytes,
+	                       1000) != ESP_OK) {
+	    return -1;
+	  }
+	  _len += r_bytes;
+	  if (_len == I2S_BUF_SIZE) break;
   }
-  i2s_buf[i].index = _index++;
-  i2s_buf[i].len = r_bytes;
+  i2s_buf.index = _index++;
+  i2s_buf.len = I2S_BUF_SIZE;
   if (_index > 100000000) _index = 0;
   
   //MOCK DATA
   /*
-  int* md = (int*)i2s_buf[i].buf;
+  int* md = (int*)i2s_buf.buf;
   int j = 0;
 md[j++] = 2144704384;
 md[j++] = 2147345536;
@@ -155,7 +157,7 @@ md[j++] = 2146185984;
   r_bytes = j * 4;
   i2s_buf[i].len = r_bytes;
 */
-  return r_bytes;
+  return i2s_buf.len;
 }
 
 static void i2s_write_init() {
@@ -167,22 +169,21 @@ static void i2s_write_init() {
   ESP_LOGI(I2S_TAG, "i2s write inited");
 }
 
-static size_t i2s_write(uint8_t i) {
+static ssize_t i2s_write() {
   size_t w_size = 0;
   size_t _len = 0;
-  if (i2s_buf[i].len == 0) return w_size;
+  if (i2s_buf.len == 0) return 0;
   while (1) {
-	  if (i2s_channel_write(tx_chan, i2s_buf[i].buf + _len, i2s_buf[i].len - _len, (size_t *)&w_size, 1000) !=
+	  if (i2s_channel_write(tx_chan, i2s_buf.buf + _len, i2s_buf.len - _len, (size_t *)&w_size, 1000) !=
 	      ESP_OK) {
-	    w_size = -1;
-	    break;
+	    return -1;
 	  }
 	  _len += w_size;
-	  if (_len == i2s_buf[i].len) {
+	  if (_len == i2s_buf.len) {
 		  break;
 	  }
   }
-  _index = i2s_buf[i].index;
+  _index = i2s_buf.index;
   return _len;
 }
 
