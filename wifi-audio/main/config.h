@@ -12,7 +12,7 @@
 #define AP_PASSWORD "WOAIruanruan"
 
 //#define SERVER_IP "192.168.166.139"
-#define SERVER_IP "192.168.166.194"
+#define SERVER_IP "192.168.77.194"
 //"192.168.166.139"
 //"192.168.166.194"
 #define SERVER_PORT 10000 

@@ -23,7 +23,7 @@
 
 #define I2S_TAG "i2s"
 
-#define I2S_BUF_SIZE 2048
+#define I2S_BUF_SIZE 512
 
 typedef struct I2S_BUF {
 	size_t len;
