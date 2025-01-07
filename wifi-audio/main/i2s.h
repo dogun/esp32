@@ -42,6 +42,7 @@ static float B2416 = 256;
 
 static size_t _index = 0;
 
+/*
 static void print_buf(uint8_t type) {
 	int* bf = (int*)i2s_buf.buf;
 	size_t len = i2s_buf.len / 4;
@@ -52,6 +53,7 @@ static void print_buf(uint8_t type) {
 	}
 	ESP_LOGE(I2S_TAG, "(%d) end print (%d)", type, (int)i2s_buf.index);
 }
+*/
 
 static void compress_buf() {
 	int32_t* buf = (int32_t*)i2s_buf.buf;

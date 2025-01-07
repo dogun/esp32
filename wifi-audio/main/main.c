@@ -17,7 +17,6 @@
 #include <lwip/netdb.h>
 
 #include "eq.h"
-#include "eq_config.h"
 #include "i2s.h"
 #include "portmacro.h"
 #include "wifi.h"
@@ -60,12 +59,12 @@ static void do_retransmit(const int sock) {
     }
     tcp_total_len += i2s_buf.len;
     // print_buf(i, 3);
-    decompress_buf();
+    // decompress_buf();
     // print_buf(i, 4);
-    ssize_t w_size = i2s_write();
-    if (w_size < 0) {
-      ESP_LOGE(TAG, "write i2s error: %d %d", errno, err);
-    }
+    //ssize_t w_size = i2s_write();
+    //if (w_size < 0) {
+    //  ESP_LOGE(TAG, "write i2s error: %d %d", errno, err);
+    //}
     i2s_total_len += i2s_buf.len;
   }
 }
@@ -74,7 +73,7 @@ static void tcp_server_task(void *pvParameters) {
   i2s_write_init();
 
   while (1) {
-    if (wifi_status != AP_OK) {
+    if (wifi_status != STA_OK) {
       ESP_LOGI(TAG, "server: wait wifi");
       vTaskDelay(1000 / portTICK_PERIOD_MS);
     } else {
@@ -84,13 +83,12 @@ static void tcp_server_task(void *pvParameters) {
 
   char addr_str[128];
 
-  int port = 12345;
   struct sockaddr_storage dest_addr;
 
   struct sockaddr_in *dest_addr_ip4 = (struct sockaddr_in *)&dest_addr;
   dest_addr_ip4->sin_addr.s_addr = htonl(INADDR_ANY);
   dest_addr_ip4->sin_family = AF_INET;
-  dest_addr_ip4->sin_port = htons(port);
+  dest_addr_ip4->sin_port = htons(SERVER_PORT);
 
   int listen_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
   if (listen_sock < 0) {
@@ -107,7 +105,7 @@ static void tcp_server_task(void *pvParameters) {
     ESP_LOGE(TAG, "Socket unable to bind: errno %d", errno);
     goto CLEAN_UP;
   }
-  ESP_LOGI(TAG, "Socket bound, port %d", port);
+  ESP_LOGI(TAG, "Socket bound, port %d", SERVER_PORT);
 
   err = listen(listen_sock, 5);
   if (err != 0) {
@@ -170,13 +168,10 @@ static ssize_t send_tcp(int sock, void *buf, size_t len) {
 }
 
 static void tcp_client_task(void *pvParameters) {
-  char host_ip[] = "192.168.4.1";
-  uint32_t port = 12345;
-
   struct sockaddr_in dest_addr;
-  dest_addr.sin_addr.s_addr = inet_addr(host_ip);
+  dest_addr.sin_addr.s_addr = inet_addr(SERVER_IP);
   dest_addr.sin_family = AF_INET;
-  dest_addr.sin_port = htons(port);
+  dest_addr.sin_port = htons(SERVER_PORT);
 
   init_i2s_read();
 
@@ -207,10 +202,11 @@ static void tcp_client_task(void *pvParameters) {
       ESP_LOGI(TAG, "Successfully connected");
 
       while (1) {
-        size_t r_size = i2s_read();
-        i2s_total_len += r_size;
+        //i2s_read();
+        i2s_buf.len = I2S_BUF_SIZE;
+        i2s_total_len += i2s_buf.len;
         // print_buf(i, 0);
-        compress_buf();
+        // compress_buf();
         ssize_t err = send_tcp(sock, &i2s_buf, i2s_buf.len + sizeof(i2s_buf.index) + sizeof(i2s_buf.len));
         if (err <= 0) {
           ESP_LOGE(TAG,
@@ -245,19 +241,15 @@ void app_main(void) {
   gpio_set_level(GPIO_NUM_17, 0);
   gpio_set_level(GPIO_NUM_18, 0);
 
-  init_wifi(SERVER_MODE);
-
   if (SERVER_MODE == 0) {
     gpio_set_level(GPIO_NUM_18, 1);
     xTaskCreatePinnedToCore(tcp_client_task, "tcp_client", 8192, NULL, 5, NULL,
                             1);
   } else {
-    load_eq();
-    xTaskCreatePinnedToCore(tcp_server_task, "tcp_server", 20480, NULL, 5, NULL,
+    //load_eq();
+    xTaskCreatePinnedToCore(tcp_server_task, "tcp_server", 8192, NULL, 5, NULL,
                             1);
-
     vTaskDelay(500 / portTICK_PERIOD_MS);
-
     gpio_set_level(GPIO_NUM_17, 1);
     gpio_set_level(GPIO_NUM_16, 0);
   }

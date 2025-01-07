@@ -8,8 +8,15 @@
 #ifndef MAIN_CONFIG_H_
 #define MAIN_CONFIG_H_
 
-#define AP_NAME "C-ESP-WIFI"
-#define AP_PASSWORD "123456789"
+#define AP_NAME "DAPENGYOU"
+#define AP_PASSWORD "WOAIruanruan"
+
+//#define SERVER_IP "192.168.166.139"
+#define SERVER_IP "192.168.166.194"
+//"192.168.166.139"
+//"192.168.166.194"
+#define SERVER_PORT 10000 
+//12345
 
 #define RATE 48000.0f
 
