@@ -22,19 +22,21 @@
 #include "portmacro.h"
 #include "wifi.h"
 
-#define SERVER_MODE 0
-
 static const char *TAG = "wifi-audio";
 
-static size_t tcp_total_len = 0;
+static size_t udp_total_len = 0;
 static size_t i2s_total_len = 0;
 
-static ssize_t _read(const int sock, void *buf, size_t len) {
+static size_t send_err_12 = 0;
+static size_t recv_err_11 = 0;
+
+static ssize_t _read(const int sock, void *buf, size_t len, int mod) {
   size_t _len = 0;
   ssize_t err = 0;
   while (1) {
-    err = recv(sock, buf + _len, len - _len, 0);
+    err = recv(sock, buf + _len, len - _len, mod);
     if (err < 0 && errno == 11) {
+		recv_err_11 ++;
 		continue; //如果缓冲区没数据，则重试
 	} else if (err < 0) {
       break;
@@ -73,7 +75,7 @@ static void udp_server_task(void *pvParameters) {
 
     // Set timeout
     struct timeval timeout;
-    timeout.tv_sec = 1;
+    timeout.tv_sec = 2;
     timeout.tv_usec = 0;
     setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout);
 
@@ -84,7 +86,7 @@ static void udp_server_task(void *pvParameters) {
     ESP_LOGI(TAG, "Socket bound, port %d", SERVER_PORT);
 
     while (1) {
-      ssize_t len = recv(sock, &i2s_buf.len, sizeof(i2s_buf.len), MSG_PEEK);
+      ssize_t len = _read(sock, &i2s_buf.len, sizeof(i2s_buf.len), MSG_PEEK);
       if (len != sizeof(i2s_buf.len)) {
         ESP_LOGE(TAG, "recvfrom buf len error: errno %d, len %d", errno, len);
         continue;
@@ -94,7 +96,7 @@ static void udp_server_task(void *pvParameters) {
         break;
       }
       len = _read(sock, &i2s_buf,
-                  sizeof(i2s_buf.index) + sizeof(i2s_buf.len) + i2s_buf.len);
+                  sizeof(i2s_buf.index) + sizeof(i2s_buf.len) + i2s_buf.len, 0);
       // Error occurred during receiving
       if (len < 0) {
         ESP_LOGE(TAG, "recvfrom failed: errno %d", errno);
@@ -104,7 +106,7 @@ static void udp_server_task(void *pvParameters) {
         ESP_LOGE(TAG, "recvfrom failed: len %d %d", len, i2s_buf.len);
         break;
       }
-      tcp_total_len += i2s_buf.len;
+      udp_total_len += i2s_buf.len;
       // print_buf(i, 3);
       decompress_buf();
       // print_buf(i, 4);
@@ -137,6 +139,7 @@ static ssize_t _send(int sock, void *buf, size_t len,
   while (1) {
     err = sendto(sock, buf + _len, len - _len, 0, dest_addr, dest_addr_len);
     if (err < 0 && errno == 12) {
+		send_err_12++;
 		continue; //缓冲区不足则重试
 	} else if (err < 0) {
       break;
@@ -198,7 +201,7 @@ static void udp_client_task(void *pvParameters) {
         ESP_LOGE(TAG, "write error: %d %d", err, i2s_buf.len);
         break;
       }
-      tcp_total_len += (err - sizeof(size_t) - sizeof(uint32_t));
+      udp_total_len += (err - sizeof(size_t) - sizeof(uint32_t));
     }
 
     if (sock != -1) {
@@ -234,8 +237,10 @@ void app_main(void) {
     gpio_set_level(GPIO_NUM_16, 0);
   }
 
-  size_t tcp_last_len = 0;
+  size_t udp_last_len = 0;
   size_t i2s_last_len = 0;
+  size_t last_err_12 = 0;
+  size_t last_err_11 = 0;
   while (true) {
     run_wifi();
 
@@ -243,17 +248,38 @@ void app_main(void) {
     size_t i2s_p = i2s_t - i2s_last_len;
     i2s_last_len = i2s_t;
 
-    size_t tcp_t = tcp_total_len;
-    size_t tcp_p = tcp_t - tcp_last_len;
-    tcp_last_len = tcp_t;
+    size_t udp_t = udp_total_len;
+    size_t udp_p = udp_t - udp_last_len;
+    udp_last_len = udp_t;
+    
+    size_t err_12_t = send_err_12;
+    size_t e12 = err_12_t - last_err_12;
+    last_err_12 = err_12_t;
+    
+    size_t err_11_t = recv_err_11;
+    size_t e11 = err_11_t - last_err_11;
+    last_err_11 = err_11_t;
 
-    if (i2s_total_len > 100000000)
+
+    if (i2s_total_len > 100000000) {
       i2s_total_len = 0;
-    if (tcp_total_len > 100000000)
-      tcp_total_len = 0;
+      i2s_last_len = 0;
+    }
+    if (udp_total_len > 100000000) {
+      udp_total_len = 0;
+      udp_last_len = 0;
+    }
+	if (send_err_12 > 100000000) {
+		send_err_12 = 0;
+		last_err_12 = 0;
+	}
+	if (recv_err_11 > 100000000) {
+		recv_err_11 = 0;
+		last_err_11 = 0;
+	}
 
-    ESP_LOGE(TAG, "tcp: %d i2s: %d index: %d last: %d %d", tcp_p, i2s_p, _index,
-             tcp_last_len, i2s_last_len);
+    ESP_LOGE(TAG, "udp: %d i2s: %d index: %d last: %d %d, neterr: %d %d", udp_p, i2s_p, _index,
+             udp_last_len, i2s_last_len, e11, e12);
     vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
 }
