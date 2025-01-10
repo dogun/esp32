@@ -8,7 +8,9 @@
 #ifndef MAIN_CONFIG_H_
 #define MAIN_CONFIG_H_
 
-#define SERVER_MODE 1
+#define SERVER_MODE 0
+
+#define TCP
 
 //#define AP_NAME "DAPENGYOU"
 //#define AP_PASSWORD "WOAIruanruan"
@@ -24,8 +26,5 @@
 #define SERVER_PORT 10000
 
 #define RATE 48000.0f
-
-#define L_CODE 0
-#define R_CODE 1
 
 #endif /* MAIN_CONFIG_H_ */

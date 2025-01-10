@@ -29,9 +29,7 @@ struct t_biquad {
 };
 
 static inline float _apply_biquads_one(float s, t_biquad* b);
-static inline void _biquads_x(int32_t* src, int32_t* dst, int len, t_biquad* biquad, int start, int eqline);
-static inline void _apply_biquads_r(int32_t* src, int32_t* dst, int len);
-static inline void _apply_biquads_l(int32_t* src, int32_t* dst, int len);
+static inline void _biquads_x(int32_t* src, int32_t* dst, int len);
 
 static void _mk_biquad(float dbgain, float cf, float q, t_biquad *b);
 
@@ -40,34 +38,36 @@ int eq_len_l;
 static t_biquad r_biquads[MAX_EQ_COUNT];
 static t_biquad l_biquads[MAX_EQ_COUNT];
 
-static inline void _biquads_x(int32_t* src, int32_t* dst, int len, t_biquad* biquad, int start, int eqline) {
+static inline void _biquads_x(int32_t* src, int32_t* dst, int len) {
 	int i, di;
 
-	for (i = start; i < len; i += 2) {
-		int32_t rl = src[i];
+	for (i = 0; i < len; i++) {
+		int32_t data = src[i];
 
-		rl = rl >> 8;
+		int32_t data_l = data >> 16;
+		int32_t data_r = data & 0xFFFF;
 
-		float l_s = (float)rl * PREAMPF;
+		float l_s = (float)data_l * PREAMPF;
 		float l_f = l_s;
 
-		for (di = 0; di < eqline; ++di) {
-			l_f = _apply_biquads_one(l_s, &(biquad[di]));
+		for (di = 0; di < eq_len_l; ++di) {
+			l_f = _apply_biquads_one(l_s, &(l_biquads[di]));
 			l_s = l_f;
 		}
-		rl = (int32_t)l_f;
-		rl = rl << 8;
+		
+		float r_s = (float)data_r * PREAMPF;
+		float r_f = r_s;
 
-		dst[i] = rl;
+		for (di = 0; di < eq_len_r; ++di) {
+			r_f = _apply_biquads_one(r_s, &(r_biquads[di]));
+			r_s = r_f;
+		}
+		
+		data_l = (int32_t)l_f;
+		data_r = (int32_t)r_f;
+
+		dst[i] = (data_l << 16) | (data_r & 0xFFFF);
 	}
-}
-
-static inline void _apply_biquads_l(int32_t* src, int32_t* dst, int len) {
-	_biquads_x(src, dst, len, l_biquads, L_CODE, eq_len_l);
-}
-
-static inline void _apply_biquads_r(int32_t* src, int32_t* dst, int len) {
-	_biquads_x(src, dst, len, r_biquads, R_CODE, eq_len_r);
 }
 
 static inline float _apply_biquads_one(float s, t_biquad* b) {

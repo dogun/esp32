@@ -27,7 +27,7 @@
 
 typedef struct I2S_BUF {
 	size_t len;
-	uint32_t index;
+	size_t index;
 	int8_t buf[I2S_BUF_SIZE];
 } i2s_buf_t;
 
@@ -42,6 +42,7 @@ static float B2416 = 256;
 
 static size_t _index = 0;
 
+static size_t i2s_total_len = 0;
 /*
 static void print_buf(uint8_t type) {
 	int* bf = (int*)i2s_buf.buf;
