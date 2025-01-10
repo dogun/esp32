@@ -9,6 +9,7 @@
 #define MAIN_WIFI_H_
 
 #include "config.h"
+#include "mdns.h"
 #include <driver/gpio.h>
 #include <esp_event.h>
 #include <esp_log.h>
@@ -31,6 +32,8 @@ typedef enum {
   STA_ERROR,
 } MY_STATUS;
 static MY_STATUS wifi_status = NOTHING;
+
+static int8_t _server;
 
 static int wifi_inited = 0;
 void _wifi_event_handler(void *arg, esp_event_base_t event_base,
@@ -61,7 +64,6 @@ static esp_event_handler_instance_t instance_got_ip;
 static esp_netif_t *nf;
 
 void _wifi_init_sta(void) {
-
   esp_err_t ret = nvs_flash_init();
   if (ret == ESP_ERR_NVS_NO_FREE_PAGES ||
       ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -95,12 +97,25 @@ void _wifi_init_sta(void) {
   ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config));
   ESP_ERROR_CHECK(esp_wifi_start());
 
+  char *hostname = CLIENT_HOSTNAME;
+  if (_server == 1) {
+    hostname = SERVER_HOSTNAME;
+  }
+
+  // 设置hostname
+  ESP_ERROR_CHECK(esp_netif_set_hostname(nf, hostname));
+  // 初始化mDNS服务
+  mdns_init();
+  mdns_hostname_set(hostname);
+  mdns_instance_name_set(hostname);
+  ESP_LOGI(WIFI_TAG, "set hostname: %s", hostname);
+
   int8_t p;
   ESP_ERROR_CHECK(esp_wifi_get_max_tx_power(&p));
   ESP_LOGI(WIFI_TAG, "1. max power: %d", p);
-  //ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(80));
-  //ESP_ERROR_CHECK(esp_wifi_get_max_tx_power(&p));
-  //ESP_LOGI(WIFI_TAG, "2. max power: %d", p);
+  // ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(80));
+  // ESP_ERROR_CHECK(esp_wifi_get_max_tx_power(&p));
+  // ESP_LOGI(WIFI_TAG, "2. max power: %d", p);
 
   ESP_LOGI(WIFI_TAG, "wifi_init_sta finished.");
   wifi_inited = 1;
@@ -123,7 +138,8 @@ void _deinit() {
 }
 
 static int log_wait = 0;
-void run_wifi() {
+void run_wifi(int8_t server) {
+  _server = server;
   if (log_wait == 0)
     ESP_LOGI(WIFI_TAG, "status now: %d", wifi_status);
   if (wifi_status == NOTHING) {

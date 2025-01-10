@@ -8,7 +8,7 @@
 #ifndef MAIN_CONFIG_H_
 #define MAIN_CONFIG_H_
 
-#define SERVER_MODE 0
+#define SERVER_MODE 1
 
 //#define AP_NAME "DAPENGYOU"
 //#define AP_PASSWORD "WOAIruanruan"
@@ -16,15 +16,12 @@
 #define AP_NAME "dogun-ap"
 #define AP_PASSWORD "dogun!@#"
 
-//#define SERVER_IP "192.168.166.139"
-//#define SERVER_IP "192.168.77.20"
+#define SERVER_HOSTNAME "wifiaudio-server"
+#define CLIENT_HOSTNAME "wifiaudio-client"
 
-#define SERVER_IP "192.168.3.77"
+#define SERVER_IP "wifiaudio-server.local"
 
-//"192.168.166.139"
-//"192.168.166.194"
-#define SERVER_PORT 10000 
-//12345
+#define SERVER_PORT 10000
 
 #define RATE 48000.0f
 
