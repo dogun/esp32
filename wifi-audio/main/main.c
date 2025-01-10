@@ -48,6 +48,8 @@ static ssize_t _read(const int sock, void *buf, size_t len, int mod) {
   return err;
 }
 
+
+static size_t _last_index = 0;
 static void udp_server_task(void *pvParameters) {
   i2s_write_init();
 
@@ -110,11 +112,17 @@ static void udp_server_task(void *pvParameters) {
       // print_buf(i, 3);
       decompress_buf();
       // print_buf(i, 4);
-
+      
+      //判断下index
+      if (i2s_buf.index - _last_index != 1) {
+		  ESP_LOGE(TAG, "i2s index error: %d %d", i2s_buf.index, _last_index);
+	  }
+      
       ssize_t w_size = i2s_write();
       if (w_size < 0) {
         ESP_LOGE(TAG, "write i2s error: %d %d", errno, err);
       }
+      _last_index = i2s_buf.index;
 
       i2s_total_len += i2s_buf.len;
     }
