@@ -11,6 +11,7 @@
 #include "driver/gpio.h"
 #include "driver/i2s_std.h"
 #include "esp_check.h"
+#include "esp_cpu.h"
 #include "esp_err.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -43,6 +44,8 @@ static float B2416 = 256;
 static size_t _index = 0;
 
 static size_t i2s_total_len = 0;
+
+static size_t _last_i2s_write = 0;
 /*
 static void print_buf(uint8_t type) {
 	int* bf = (int*)i2s_buf.buf;
@@ -109,7 +112,6 @@ static i2s_std_config_t std_cfg = {
 };
 
 static void init_i2s_read() {
-
   i2s_chan_config_t rx_chan_cfg =
       I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
   ESP_ERROR_CHECK(i2s_new_channel(&rx_chan_cfg, NULL, &rx_chan));
@@ -169,6 +171,9 @@ static void i2s_write_init() {
   ESP_ERROR_CHECK(i2s_new_channel(&tx_chan_cfg, &tx_chan, NULL));
   ESP_ERROR_CHECK(i2s_channel_init_std_mode(tx_chan, &std_cfg));
   ESP_ERROR_CHECK(i2s_channel_enable(tx_chan));
+  
+  _last_i2s_write = esp_cpu_get_cycle_count();
+  
   ESP_LOGI(I2S_TAG, "i2s write inited");
 }
 
@@ -187,6 +192,7 @@ static ssize_t i2s_write() {
 	  }
   }
   _index = i2s_buf.index;
+  _last_i2s_write = esp_cpu_get_cycle_count();
   return _len;
 }
 

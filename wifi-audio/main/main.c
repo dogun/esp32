@@ -23,12 +23,41 @@
 #include "wifi.h"
 
 #ifdef TCP
-	#include "tcp.h"
+#include "tcp.h"
 #else
-	#include "udp.h"
+#include "udp.h"
 #endif
 
 static const char *TAG = "wifi-audio";
+
+static int muted = 0;
+static void mute() {
+  if (muted == 0) {
+    gpio_set_level(GPIO_NUM_16, 1);
+    muted = 1;
+    ESP_LOGI(TAG, "mute");
+  }
+}
+
+static void unmute() {
+  if (muted == 1) {
+    gpio_set_level(GPIO_NUM_16, 0);
+    muted = 0;
+    ESP_LOGI(TAG, "unmute");
+  }
+}
+
+static void mute_task(void *pvParameters) {
+  while (1) {
+	vTaskDelay(50 / portTICK_PERIOD_MS);
+    size_t now = esp_cpu_get_cycle_count();
+    if (now - _last_i2s_write > 4000000) { // 长时间未写入
+      mute();
+    } else {
+      unmute();
+    }
+  }
+}
 
 void app_main(void) {
   gpio_reset_pin(GPIO_NUM_16);
@@ -41,7 +70,7 @@ void app_main(void) {
   gpio_set_level(GPIO_NUM_16, 1);
   gpio_set_level(GPIO_NUM_17, 0);
   gpio_set_level(GPIO_NUM_18, 0);
-  
+
   load_eq();
 
   if (SERVER_MODE == 0) {
@@ -49,6 +78,7 @@ void app_main(void) {
     xTaskCreatePinnedToCore(net_client_task, "_client", 8192, NULL, 5, NULL, 1);
   } else {
     xTaskCreatePinnedToCore(net_server_task, "_server", 8192, NULL, 5, NULL, 1);
+    xTaskCreatePinnedToCore(mute_task, "_mute", 4096, NULL, 5, NULL, 1);
     vTaskDelay(500 / portTICK_PERIOD_MS);
     gpio_set_level(GPIO_NUM_17, 1);
     gpio_set_level(GPIO_NUM_16, 0);
