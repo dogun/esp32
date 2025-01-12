@@ -131,10 +131,10 @@ static void net_server_task(void *pvParameters) {
         }
         net_total_len += i2s_buf.len;
 
-        _biquads_x((int32_t *)i2s_buf.buf, (int32_t *)i2s_buf.buf,
-                   i2s_buf.len / 4);
         // print_buf(i, 3);
         decompress_buf();
+        _biquads_x((int32_t *)i2s_buf.buf, (int32_t *)i2s_buf.buf,
+                   i2s_buf.len / 4);
         // print_buf(i, 4);
 
         // 判断下index

@@ -33,19 +33,17 @@ static inline void _biquads_x(int32_t* src, int32_t* dst, int len);
 
 static void _mk_biquad(float dbgain, float cf, float q, t_biquad *b);
 
-int eq_len_r;
-int eq_len_l;
+static size_t eq_len_r;
+static size_t eq_len_l;
 static t_biquad r_biquads[MAX_EQ_COUNT];
 static t_biquad l_biquads[MAX_EQ_COUNT];
 
 static inline void _biquads_x(int32_t* src, int32_t* dst, int len) {
 	int i, di;
 
-	for (i = 0; i < len; i++) {
-		int32_t data = src[i];
-
-		int32_t data_l = data >> 16;
-		int32_t data_r = data & 0xFFFF;
+	for (i = 0; i < len; i = i + 2) {
+		int32_t data_l = (src[i] << 1) >> 8;
+		int32_t data_r = (src[i + 1] << 1) >> 8;
 
 		float l_s = (float)data_l * PREAMPF;
 		float l_f = l_s;
@@ -66,7 +64,8 @@ static inline void _biquads_x(int32_t* src, int32_t* dst, int len) {
 		data_l = (int32_t)l_f;
 		data_r = (int32_t)r_f;
 
-		dst[i] = (data_l << 16) | (data_r & 0xFFFF);
+		dst[i] = (data_l << 7) & 0x7FFFFFFF;
+		dst[i+1] = (data_r << 7) & 0x7FFFFFFF;
 	}
 }
 
@@ -129,4 +128,11 @@ static void _mk_biquad(float dbgain, float cf, float q, t_biquad* b) {
   b->gain = dbgain;
 }
 
+
+static void load_eq() {
+	_mk_biquad(-6, 1000, 1, &l_biquads[0]);
+	_mk_biquad(6, 1000, 1, &r_biquads[0]);
+	eq_len_l = 1;
+	eq_len_r = 1;
+}
 #endif

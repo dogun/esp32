@@ -41,12 +41,13 @@ void app_main(void) {
   gpio_set_level(GPIO_NUM_16, 1);
   gpio_set_level(GPIO_NUM_17, 0);
   gpio_set_level(GPIO_NUM_18, 0);
+  
+  load_eq();
 
   if (SERVER_MODE == 0) {
     gpio_set_level(GPIO_NUM_18, 1);
     xTaskCreatePinnedToCore(net_client_task, "_client", 8192, NULL, 5, NULL, 1);
   } else {
-    // load_eq();
     xTaskCreatePinnedToCore(net_server_task, "_server", 8192, NULL, 5, NULL, 1);
     vTaskDelay(500 / portTICK_PERIOD_MS);
     gpio_set_level(GPIO_NUM_17, 1);

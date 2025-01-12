@@ -9,6 +9,7 @@
 #define MAIN_UDP_H_
 
 #include "config.h"
+#include "eq.h"
 #include "esp_event.h"
 #include "esp_log.h"
 #include "esp_netif.h"
@@ -16,19 +17,18 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
+#include "i2s.h"
+#include "lwip/err.h"
+#include "lwip/sockets.h"
+#include "lwip/sys.h"
 #include "nvs_flash.h"
+#include "portmacro.h"
+#include "wifi.h"
+#include <lwip/netdb.h>
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
 #include <sys/param.h>
-#include "lwip/err.h"
-#include "lwip/sockets.h"
-#include "lwip/sys.h"
-#include <lwip/netdb.h>
-#include "eq.h"
-#include "i2s.h"
-#include "portmacro.h"
-#include "wifi.h"
 
 static const char *UDP_TAG = "udp";
 
@@ -54,7 +54,6 @@ static ssize_t _read(const int sock, void *buf, size_t len, int mod) {
   }
   return err;
 }
-
 
 static size_t _last_index = 0;
 static void net_server_task(void *pvParameters) {
@@ -97,7 +96,8 @@ static void net_server_task(void *pvParameters) {
     while (1) {
       ssize_t len = _read(sock, &i2s_buf.len, sizeof(i2s_buf.len), MSG_PEEK);
       if (len < 0) {
-        ESP_LOGE(UDP_TAG, "recvfrom buf len error: errno %d, len %d", errno, len);
+        ESP_LOGE(UDP_TAG, "recvfrom buf len error: errno %d, len %d", errno,
+                 len);
         continue;
       }
       if (i2s_buf.len > I2S_BUF_SIZE) {
@@ -112,17 +112,18 @@ static void net_server_task(void *pvParameters) {
         break;
       }
       net_total_len += i2s_buf.len;
-      
-      _biquads_x((int32_t*)i2s_buf.buf, (int32_t*)i2s_buf.buf, i2s_buf.len / 4);
+
+      _biquads_x((int32_t *)i2s_buf.buf, (int32_t *)i2s_buf.buf,
+                 i2s_buf.len / 4);
       // print_buf(i, 3);
       decompress_buf();
       // print_buf(i, 4);
-      
-      //判断下index
+
+      // 判断下index
       if (i2s_buf.index - _last_index != 1) {
-		  ESP_LOGE(UDP_TAG, "i2s index error: %d %d", i2s_buf.index, _last_index);
-	  }
-      
+        ESP_LOGE(UDP_TAG, "i2s index error: %d %d", i2s_buf.index, _last_index);
+      }
+
       ssize_t w_size = i2s_write();
       if (w_size < 0) {
         ESP_LOGE(UDP_TAG, "write i2s error: %d %d", errno, err);
@@ -209,7 +210,8 @@ static void net_client_task(void *pvParameters) {
 
     setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof timeout);
 
-    ESP_LOGI(UDP_TAG, "Socket created, sending to %s:%d", SERVER_IP, SERVER_PORT);
+    ESP_LOGI(UDP_TAG, "Socket created, sending to %s:%d", SERVER_IP,
+             SERVER_PORT);
 
     while (1) {
       i2s_read();
