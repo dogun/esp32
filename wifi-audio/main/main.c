@@ -124,7 +124,7 @@ void app_main(void) {
       last_err_11 = 0;
     }
 
-    ESP_LOGE(TAG, "net: %d i2s: %d index: %d last: %d %d, neterr: %d %d", net_p,
+    ESP_LOGI(TAG, "net: %d i2s: %d index: %d last: %d %d, neterr: %d %d", net_p,
              i2s_p, _index, net_last_len, i2s_last_len, e11, e12);
     vTaskDelay(1000 / portTICK_PERIOD_MS);
   }
