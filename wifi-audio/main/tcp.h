@@ -24,6 +24,7 @@
 #include "nvs_flash.h"
 #include "portmacro.h"
 #include "wifi.h"
+#include <errno.h>
 #include <lwip/netdb.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -56,25 +57,26 @@ static size_t _last_index = 0;
 static void net_server_task(void *pvParameters) {
   i2s_write_init();
 
+  struct timeval timeout;
+  timeout.tv_sec = 2;
+  timeout.tv_usec = 0;
+
+  struct sockaddr_in dest_addr;
+  dest_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+  dest_addr.sin_family = AF_INET;
+  dest_addr.sin_port = htons(SERVER_PORT);
+
   while (1) {
     if (wifi_status != STA_OK) {
       ESP_LOGI(TCP_TAG, "server: wait wifi");
       vTaskDelay(1000 / portTICK_PERIOD_MS);
-    } else {
-      break;
+      continue;
     }
-  }
-
-  while (1) {
-    struct sockaddr_in dest_addr;
-    dest_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    dest_addr.sin_family = AF_INET;
-    dest_addr.sin_port = htons(SERVER_PORT);
 
     int l_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (l_sock < 0) {
       ESP_LOGE(TCP_TAG, "Unable to create socket: errno %d", errno);
-      break;
+      continue;
     }
     ESP_LOGI(TCP_TAG, "Socket created");
 
@@ -96,19 +98,16 @@ static void net_server_task(void *pvParameters) {
     ESP_LOGI(TCP_TAG, "Socket listening");
 
     while (1) {
-      struct sockaddr_storage source_addr; // Large enough for both IPv4 or IPv6
+      struct sockaddr_storage source_addr;
       socklen_t addr_len = sizeof(source_addr);
       int sock = accept(l_sock, (struct sockaddr *)&source_addr, &addr_len);
       if (sock < 0) {
         ESP_LOGE(TCP_TAG, "Unable to accept connection: errno %d", errno);
-        break;
+        break; //跳出accept循环，重新创建socket
       }
       ESP_LOGI(TCP_TAG, "Socket accepted");
 
       // Set timeout
-      struct timeval timeout;
-      timeout.tv_sec = 2;
-      timeout.tv_usec = 0;
       setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout);
 
       while (1) {
@@ -160,9 +159,14 @@ static void net_server_task(void *pvParameters) {
       }
     }
   CLEAN_UP:
-    close(l_sock);
-    vTaskDelete(NULL);
+    if (l_sock != -1) {
+      ESP_LOGE(TCP_TAG, "Shutting down l_socket and restarting...");
+      shutdown(l_sock, 0);
+      close(l_sock);
+      vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
   }
+  vTaskDelete(NULL);
 }
 
 static ssize_t _send(int sock, void *buf, size_t len,
@@ -202,14 +206,14 @@ static void net_client_task(void *pvParameters) {
 
     // 域名解析
     struct hostent *server_info;
-    while (1) {
-      ESP_LOGI(TCP_TAG, "query ip: %s", SERVER_IP);
+    ESP_LOGI(TCP_TAG, "query ip: %s", SERVER_IP);
 
-      server_info = gethostbyname(SERVER_IP);
-      if (server_info) {
-        break;
-      }
+    server_info = gethostbyname(SERVER_IP);
+    if (!server_info) {
+      ESP_LOGI(TCP_TAG, "query ip error: %s %d", SERVER_IP, errno);
+      continue;
     }
+
     // 获取服务器IP地址
     uint8_t server_ip[4];
     bcopy(server_info->h_addr_list[0], server_ip, sizeof(server_ip));
@@ -226,9 +230,10 @@ static void net_client_task(void *pvParameters) {
     int sock = socket(AF_INET, SOCK_STREAM, IPPROTO_IP);
     if (sock < 0) {
       ESP_LOGE(TCP_TAG, "Unable to create socket: errno %d", errno);
-      break;
+      continue;
     }
 
+    // Set Timeout
     setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof timeout);
 
     ESP_LOGI(TCP_TAG, "Socket created");
@@ -236,7 +241,7 @@ static void net_client_task(void *pvParameters) {
     int err = connect(sock, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
     if (err != 0) {
       ESP_LOGE(TCP_TAG, "Socket unable to connect: errno %d", errno);
-      break;
+      goto CLEAN_UP;
     }
     ESP_LOGI(TCP_TAG, "Successfully connected");
 
@@ -263,6 +268,7 @@ static void net_client_task(void *pvParameters) {
       net_total_len += (err - sizeof(size_t) - sizeof(uint32_t));
     }
 
+  CLEAN_UP:
     if (sock != -1) {
       ESP_LOGE(TCP_TAG, "Shutting down socket and restarting...");
       shutdown(sock, 0);
