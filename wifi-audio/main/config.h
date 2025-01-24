@@ -8,7 +8,7 @@
 #ifndef MAIN_CONFIG_H_
 #define MAIN_CONFIG_H_
 
-#define SERVER_MODE 0
+#define SERVER_MODE 1
 
 #define TCP
 

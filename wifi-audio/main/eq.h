@@ -130,9 +130,13 @@ static void _mk_biquad(float dbgain, float cf, float q, t_biquad* b) {
 
 
 static void load_eq() {
-	_mk_biquad(-6, 1000, 1, &l_biquads[0]);
-	_mk_biquad(6, 1000, 1, &r_biquads[0]);
-	eq_len_l = 1;
-	eq_len_r = 1;
+	//int i = 0;
+	//_mk_biquad(-2.8, 510, 2.588, &l_biquads[i++]);
+	//_mk_biquad(-6.2, 1728, 1.281, &l_biquads[i++]);
+	//_mk_biquad(-7.2, 4540, 1.143, &l_biquads[i++]);
+	//eq_len_l = i;
+	
+	//_mk_biquad(6, 1000, 1, &r_biquads[0]);
+	//eq_len_r = 1;
 }
 #endif
