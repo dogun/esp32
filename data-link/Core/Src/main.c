@@ -77,21 +77,20 @@ static void MX_USB_PCD_Init(void);
 
 #define SERVER 1
 
-#define SERVER_ADDR_H 0xFF
-#define SERVER_ADDR_L 0xFF
+#define SERVER_ADDR_H 0x01
+#define SERVER_ADDR_L 0x01
 
 #define SERVER_CHANNEL_NO 0x2E
 #define ME_CHANNEL_NO 0x2E
 
 #ifdef SERVER
-	#define ME_ADDR_H 0xFF
-	#define ME_ADDR_L 0xFF
+	#define ME_ADDR_H 0x01
+	#define ME_ADDR_L 0x01
 #else
 	#define ME_ADDR_H 0x02
 	#define ME_ADDR_L 0x02
 #endif
 
-uint32_t w_busy = 0;
 #define MAX_LEN 47
 
 #define RECV_HEAD_LEN 4
@@ -240,7 +239,7 @@ HAL_StatusTypeDef set_p() {
 		setting[4] = ME_CHANNEL_NO;
 	}
 	setting[3] = 0x19; //波特率等
-	setting[5] = 0x00; //发射功率等
+	setting[5] = 0x80; //单点模式
 	__HAL_UART_FLUSH_DRREGISTER(&huart3);
 	HAL_StatusTypeDef ret = HAL_UART_Transmit(&huart3, setting, sizeof(setting), 1000);
 	if (ret != HAL_OK) {
@@ -269,17 +268,19 @@ HAL_StatusTypeDef set_p() {
 	return HAL_OK;
 }
 
-/*
 HAL_StatusTypeDef send_data(w_pack* wp) {
+	wait_w();
+	__HAL_UART_FLUSH_DRREGISTER(&huart3);
 	return HAL_UART_Transmit(&huart3, (uint8_t*)wp, HEAD_LEN + wp->dp.len, 1000);
 }
-*/
 
+/*
 HAL_StatusTypeDef send_data(data_pack* dp) {
 	wait_w();
 	__HAL_UART_FLUSH_DRREGISTER(&huart3);
 	return HAL_UART_Transmit(&huart3, (uint8_t*)dp, RECV_HEAD_LEN + dp->len, 1000);
 }
+*/
 
 ssize_t recv_data(data_pack* dp) {
 	check_recv();
@@ -361,7 +362,7 @@ int main(void)
 			wp.dp.len = MAX_LEN;
 			memcpy(wp.dp.data, val, wp.dp.len);
 			wp.dp.crc = crc8(wp.dp.data, wp.dp.len);
-			HAL_StatusTypeDef ret = send_data(&wp.dp);
+			HAL_StatusTypeDef ret = send_data(&wp);
 			if (ret != HAL_OK) {
 				wp.dp.crc ++;
 			}
