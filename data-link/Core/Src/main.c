@@ -75,24 +75,20 @@ static void MX_USB_PCD_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-#define SERVER
+/**
+ * 采用透传模式，共支持10个客户端，全部采用FF信道，但是定义各自的ID，互相协同，按照顺序分别发送
+ */
 
-#define SERVER_ADDR_H 0x01
-#define SERVER_ADDR_L 0x01
+//#define SERVER
+#define CLIENT_ID 0x03
+#define CLIENT_NUM 10
+#define SEND_WAIT_TIME 1000
 
-#define SERVER_CHANNEL_NO 0x2E
-#define ME_CHANNEL_NO 0x2E
+#define ADDR_H 0xFF
+#define ADDR_L 0xFF
+#define CHANNEL_NO 0x2E
 
-#ifdef SERVER
-	#define ME_ADDR_H 0x01
-	#define ME_ADDR_L 0x01
-#else  //客户端的ID这里设置
-	#define ME_ADDR_H 0x02
-	#define ME_ADDR_L 0x02
-#endif
-
-#define HEAD_LEN 8
-#define RECV_HEAD_LEN 5
+#define HEAD_LEN 4
 #define PACKAGE_LEN 54
 #define MAX_DATA_LEN PACKAGE_LEN - HEAD_LEN
 
@@ -101,20 +97,12 @@ typedef enum {
 } data_type;
 
 typedef struct _DATA_PACK {
-	uint8_t addr_h;
-	uint8_t addr_l;
+	uint8_t client_id;
 	uint8_t type; //数据类型
 	uint8_t crc;
 	uint8_t len;
 	uint8_t data[MAX_DATA_LEN];
 } data_pack;
-
-typedef struct _W_PACK {
-	uint8_t addr_h;
-	uint8_t addr_l;
-	uint8_t channel;
-	data_pack dp;
-} w_pack;
 
 uint8_t setting[6] = { 0 };
 uint8_t setting1[6] = { 0 };
@@ -126,6 +114,7 @@ uint32_t size_cnt = 0;
 uint32_t error_cnt = 0;
 uint32_t ok_cnt1 = 0;
 uint32_t ok_cnt2 = 0;
+uint32_t uart1_cnt = 0;
 
 uint8_t crc8(const uint8_t *data, size_t length) {
 	uint8_t polynomial = 0x07;
@@ -260,17 +249,11 @@ HAL_StatusTypeDef set_p() {
 	HAL_Delay(10); //等10ms
 	//设置地址和信道等
 	setting[0] = 0xC0;
-	if (SERVER_ADDR_H == ME_ADDR_H && SERVER_ADDR_L == ME_ADDR_L) {
-		setting[1] = SERVER_ADDR_H; //地址高字节
-		setting[2] = SERVER_ADDR_L; //地址低字节
-		setting[4] = SERVER_CHANNEL_NO; //信道
-	} else {
-		setting[1] = ME_ADDR_H;
-		setting[2] = ME_ADDR_L;
-		setting[4] = ME_CHANNEL_NO;
-	}
+	setting[1] = ADDR_H; //地址高字节
+	setting[2] = ADDR_L; //地址低字节
+	setting[4] = CHANNEL_NO; //信道
 	setting[3] = 0x1D; //波特率等 空中速率50K
-	setting[5] = 0x80; //单点模式
+	setting[5] = 0x00; //透传模式
 	__HAL_UART_FLUSH_DRREGISTER(&huart3);
 	HAL_StatusTypeDef ret = HAL_UART_Transmit(&huart3, setting, sizeof(setting),
 			1000);
@@ -306,18 +289,14 @@ HAL_StatusTypeDef set_p() {
 //永远都发送package size
 HAL_StatusTypeDef send_data(uint8_t addrh, uint8_t addrl, uint8_t ch,
 		data_type type, uint8_t *data, size_t len) {
-	w_pack wp = { 0 };
-	wp.addr_h = addrh;
-	wp.addr_l = addrl;
-	wp.channel = ch;
-	wp.dp.addr_h = ME_ADDR_H;
-	wp.dp.addr_l = ME_ADDR_L;
-	wp.dp.type = type;
-	wp.dp.len = len;
-	memcpy(wp.dp.data, data, len);
-	wp.dp.crc = crc8(wp.dp.data, len);
+	data_pack dp = { 0 };
+	dp.client_id = CLIENT_ID;
+	dp.type = type;
+	dp.len = len;
+	memcpy(dp.data, data, len);
+	dp.crc = crc8(dp.data, len);
 	wait_w();
-	HAL_StatusTypeDef ret = HAL_UART_Transmit(&huart3, (uint8_t*) &wp,
+	HAL_StatusTypeDef ret = HAL_UART_Transmit(&huart3, (uint8_t*) &dp,
 	HEAD_LEN + len, 1000);
 	if (ret != HAL_OK) {
 		log_error(ret);
@@ -327,24 +306,15 @@ HAL_StatusTypeDef send_data(uint8_t addrh, uint8_t addrl, uint8_t ch,
 }
 
 HAL_StatusTypeDef send_data_to_server(data_type type, uint8_t *data, size_t len) {
-	return send_data(SERVER_ADDR_H, SERVER_ADDR_L, SERVER_CHANNEL_NO, type,
+	return send_data(ADDR_H, ADDR_L, CHANNEL_NO, type,
 			data, len);
 }
-
-/*
- //透明传输模式
- HAL_StatusTypeDef send_data(data_pack* dp) {
- wait_w();
- __HAL_UART_FLUSH_DRREGISTER(&huart3);
- return HAL_UART_Transmit(&huart3, (uint8_t*)dp, RECV_HEAD_LEN + dp->len, 1000);
- }
- */
 
 HAL_StatusTypeDef recv_data(data_pack *dp) {
 	//check_recv();
 	//__HAL_UART_FLUSH_DRREGISTER(&huart3);
 	HAL_StatusTypeDef ret = HAL_UART_Receive(&huart3, (uint8_t*) dp,
-	RECV_HEAD_LEN, 2000);
+	HEAD_LEN, 10000);
 	if (ret != HAL_OK) {
 		log_error(ret);
 		return ret;
@@ -361,6 +331,71 @@ HAL_StatusTypeDef recv_data(data_pack *dp) {
 	}
 	log_ok(dp->type);
 	return HAL_OK;
+}
+
+HAL_StatusTypeDef send_pt100_flow_data() {
+	int val[16] = { 0 };
+	uint32_t i = 0;
+	for (i = 0; i < 16; ++i) {
+		val[i] = get_adc_val(i);
+	}
+
+	//填充数据
+	uint32_t data[8] = { 0 };
+
+	//1.PT100数据
+	data[0] = (val[0] > val[1]) ? val[0] - val[1] : val[1] - val[0];
+	data[1] = (val[2] > val[3]) ? val[2] - val[3] : val[3] - val[2];
+	data[2] = (val[4] > val[5]) ? val[4] - val[5] : val[5] - val[4];
+	data[3] = (val[6] > val[7]) ? val[6] - val[7] : val[7] - val[6];
+	//2.flow数据
+	data[4] = val[8];
+	data[5] = val[9];
+	data[6] = val[10];
+	data[7] = val[11];
+
+	HAL_StatusTypeDef ret = send_data_to_server(DATA_TYPE_PT100_FLOW,
+			(uint8_t*) data, 8 * sizeof(uint32_t));
+	return ret;
+}
+
+HAL_StatusTypeDef send_current_data() {
+	int val[16] = { 0 };
+	uint32_t i = 0;
+	for (i = 0; i < 16; ++i) {
+		val[i] = get_adc_val(i);
+	}
+	//填充数据
+	uint32_t data[4] = { 0 };
+
+	//3. current数据
+	data[0] = val[12];
+	data[1] = val[13];
+	data[2] = val[14];
+	data[3] = val[15];
+	HAL_StatusTypeDef ret = send_data_to_server(DATA_TYPE_CURRENT, (uint8_t*) data,
+			4 * sizeof(uint32_t));
+
+	return ret;
+}
+
+uint8_t _switch = 0;
+HAL_StatusTypeDef send_data_switch() {
+	HAL_StatusTypeDef ret;
+	if (_switch == 0) {
+		ret = send_pt100_flow_data();
+		_switch = 1;
+	}else {
+		ret = send_current_data();
+		_switch = 0;
+	}
+	return ret;
+}
+
+uint8_t is_pre(uint8_t me, uint8_t pre) {
+	if (me == 1 && pre == CLIENT_NUM) return 1;
+	if (me == pre + 1) return 1;
+	return 0;
 }
 
 /* USER CODE END 0 */
@@ -410,60 +445,41 @@ int main(void) {
 	while (set_p() != HAL_OK) {
 		HAL_Delay(100);
 	}
+	uint32_t last_recv_time = 0;
+	uint8_t last_recv_id = 0;
 	while (1) {
-		if (SERVER_ADDR_H != ME_ADDR_H || SERVER_ADDR_L != ME_ADDR_L) {
-			HAL_Delay(1000);
+#ifdef SERVER
+		//纯接收，再通过uart1转发出去
+		data_pack dp = { 0 };
+		HAL_StatusTypeDef r = recv_data(&dp);
+		if (r != HAL_OK) {
+			continue;
+		}
+		HAL_StatusTypeDef ret = HAL_UART_Transmit(&huart1, (uint8_t*) &dp,
+				HEAD_LEN + dp.len, 1000);
+		if (ret != HAL_OK) {
+			uart1_cnt++;
+		}
+#else
+		//一直循环计时，事件驱动，当接受到数据，判断是不是自己的上一个，如果不是，继续等待接收，直到上一个到达
+		uint32_t now = HAL_GetTick();
 
-			int val[16] = { 0 };
-			uint32_t i = 0;
-			for (i = 0; i < 16; ++i) {
-				val[i] = get_adc_val(i);
-			}
-
-			//填充数据
-			uint32_t data[8] = { 0 };
-
-			//1.PT100数据
-			data[0] = (val[0] > val[1]) ? val[0] - val[1] : val[1] - val[0];
-			data[1] = (val[2] > val[3]) ? val[2] - val[3] : val[3] - val[2];
-			data[2] = (val[4] > val[5]) ? val[4] - val[5] : val[5] - val[4];
-			data[3] = (val[6] > val[7]) ? val[6] - val[7] : val[7] - val[6];
-			//2.flow数据
-			data[4] = val[8];
-			data[5] = val[9];
-			data[6] = val[10];
-			data[7] = val[11];
-
-			HAL_StatusTypeDef ret = send_data_to_server(DATA_TYPE_PT100_FLOW,
-					(uint8_t*) data, 8 * sizeof(uint32_t));
-			if (ret != HAL_OK) {
-				continue;
-			}
-
-			HAL_Delay(1000);
-			//3. current数据
-			data[0] = val[12];
-			data[1] = val[13];
-			data[2] = val[14];
-			data[3] = val[15];
-			ret = send_data_to_server(DATA_TYPE_CURRENT, (uint8_t*) data,
-					4 * sizeof(uint32_t));
-
-			if (ret != HAL_OK) {
-				continue;
-			}
-		} else {
-			data_pack dp = { 0 };
-			HAL_StatusTypeDef r = recv_data(&dp);
-			if (r != HAL_OK) {
-				continue;
-			}
-			if (dp.type == DATA_TYPE_PT100_FLOW) {
-				dp.crc = 1;
-			} else if (dp.type == DATA_TYPE_CURRENT) {
-				dp.crc = 2;
+		data_pack dp = { 0 };
+		HAL_StatusTypeDef r = recv_data(&dp);
+		if (r == HAL_OK) {
+			last_recv_time = now;
+			last_recv_id = dp.client_id;
+			if (is_pre(CLIENT_ID, dp.client_id)) { //现在收到的是我的上一个
+				send_data_switch();
 			}
 		}
+		//计算上一次收到的id和我的距离
+		uint32_t dist = (last_recv_id > CLIENT_ID) ? CLIENT_NUM - last_recv_id + CLIENT_ID : CLIENT_ID - last_recv_id;
+		if (now - last_recv_time >= SEND_WAIT_TIME * dist) { //需要发送了
+			send_data_switch();
+			last_recv_time = now;
+		}
+#endif
 		/* USER CODE END WHILE */
 
 		/* USER CODE BEGIN 3 */
