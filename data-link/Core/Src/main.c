@@ -18,12 +18,20 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "adc.h"
+#include "dma.h"
+#include "i2c.h"
+#include "tim.h"
+#include "usart.h"
+#include "usb.h"
+#include "gpio.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "string.h"
 #include "stdio.h"
 #include "stdlib.h"
+#include "crc8.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -42,17 +50,6 @@
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
-ADC_HandleTypeDef hadc1;
-
-I2C_HandleTypeDef hi2c1;
-
-TIM_HandleTypeDef htim2;
-TIM_HandleTypeDef htim3;
-
-UART_HandleTypeDef huart1;
-UART_HandleTypeDef huart3;
-
-PCD_HandleTypeDef hpcd_USB_FS;
 
 /* USER CODE BEGIN PV */
 
@@ -60,14 +57,6 @@ PCD_HandleTypeDef hpcd_USB_FS;
 
 /* Private function prototypes -----------------------------------------------*/
 void SystemClock_Config(void);
-static void MX_GPIO_Init(void);
-static void MX_USART1_UART_Init(void);
-static void MX_ADC1_Init(void);
-static void MX_TIM2_Init(void);
-static void MX_TIM3_Init(void);
-static void MX_USART3_UART_Init(void);
-static void MX_I2C1_Init(void);
-static void MX_USB_PCD_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -79,10 +68,10 @@ static void MX_USB_PCD_Init(void);
  * 采用透传模式，共支持10个客户端，全部采用FF信道，但是定义各自的ID，互相协同，按照顺序分别发送
  */
 
-//#define SERVER
+#define SERVER
 #define CLIENT_ID 0x03
-#define CLIENT_NUM 10
-#define SEND_WAIT_TIME 1000
+#define CLIENT_NUM 3
+#define SEND_WAIT_TIME 2000
 
 #define ADDR_H 0xFF
 #define ADDR_L 0xFF
@@ -91,6 +80,9 @@ static void MX_USB_PCD_Init(void);
 #define HEAD_LEN 4
 #define PACKAGE_LEN 54
 #define MAX_DATA_LEN PACKAGE_LEN - HEAD_LEN
+
+#define MIN(a,b) (((a) < (b)) ? (a) : (b))
+#define MAX(a,b) (((a) > (b)) ? (a) : (b))
 
 typedef enum {
 	DATA_TYPE_PT100_FLOW = 0x00U, DATA_TYPE_CURRENT = 0x01U
@@ -104,35 +96,33 @@ typedef struct _DATA_PACK {
 	uint8_t data[MAX_DATA_LEN];
 } data_pack;
 
-uint8_t setting[6] = { 0 };
-uint8_t setting1[6] = { 0 };
-uint8_t setting2[6] = { 0 };
+typedef struct _DATA_LOGGER {
+	uint32_t recv_cnt_by_client[10];
+	uint32_t recv_ok_cnt_1;
+	uint32_t recv_ok_cnt_2;
+	uint32_t send_ok_cnt_1;
+	uint32_t send_ok_cnt_2;
+	uint32_t send_ok_cnt;
+	uint32_t send_ok_timeout_cnt;
+	uint32_t recv_timout_cnt;
+	uint32_t send_timout_cnt;
+	uint32_t recv_crc_error_cnt;
+	uint32_t recv_size_error_cnt;
+	uint32_t recv_client_error_cnt;
+	uint32_t recv_unknow_error_cnt;
+	uint32_t send_unknow_error_cnt;
+	uint32_t uart1_error_cnt;
 
-uint32_t timout_cnt = 0;
-uint32_t crc_cnt = 0;
-uint32_t size_cnt = 0;
-uint32_t error_cnt = 0;
-uint32_t ok_cnt1 = 0;
-uint32_t ok_cnt2 = 0;
-uint32_t uart1_cnt = 0;
+} data_logger;
 
-uint8_t crc8(const uint8_t *data, size_t length) {
-	uint8_t polynomial = 0x07;
-	uint8_t initial_value = 0x00;
+data_pack recv_buf = { 0 };
+data_pack send_buf = { 0 };
+data_logger logger = { 0 };
 
-	uint8_t crc = initial_value;
-	for (int i = 0; i < length; i++) {
-		crc ^= data[i];
-		for (int j = 0; j < 8; j++) {
-			if (crc & 0x80) {
-				crc = (crc << 1) ^ polynomial;
-			} else {
-				crc <<= 1;
-			}
-		}
-	}
-	return crc;
-}
+uint32_t last_recv_time = 0;
+uint32_t last_recv_time_a[CLIENT_NUM] = {0};
+uint32_t last_send_time = 0;
+uint8_t last_client_id = 0;
 
 uint32_t get_adc_val(uint32_t index) {
 	ADC_ChannelConfTypeDef sConfig = { 0 };
@@ -211,43 +201,71 @@ uint32_t aux_ready() {
 	}
 }
 
-void wait_w() {
+void wait_w() { //等待可写
 	while (aux_ready() != 1) {
 		//nothing to do
 	}
 }
 
-void check_recv() {
-	while (aux_ready() != 0) {
-		//nothing to do
-	}
-}
-
-void log_error(HAL_StatusTypeDef e) {
+void recv_log_error(HAL_StatusTypeDef e) {
 	if (e == HAL_TIMEOUT)
-		timout_cnt++;
+		logger.recv_timout_cnt++;
 	if (e == HAL_ERROR)
-		error_cnt++;
+		logger.recv_unknow_error_cnt++;
 }
 
-void log_ok(data_type type) {
+void send_log_error(HAL_StatusTypeDef e) {
+	if (e == HAL_TIMEOUT)
+		logger.send_timout_cnt++;
+	if (e == HAL_ERROR)
+		logger.send_unknow_error_cnt++;
+}
+
+void recv_log_ok(data_type type) {
 	if (type == DATA_TYPE_CURRENT) {
-		ok_cnt2++;
+		logger.recv_ok_cnt_2++;
 	} else {
-		ok_cnt1++;
+		logger.recv_ok_cnt_1++;
 	}
+}
+
+void send_log_ok(data_type type) {
+	if (type == DATA_TYPE_CURRENT) {
+		logger.send_ok_cnt_2++;
+	} else {
+		logger.send_ok_cnt_1++;
+	}
+}
+
+HAL_StatusTypeDef get_p() {
+	//查询设置
+	uint8_t query[3] = { 0xC1, 0xC1, 0xC1 };
+	HAL_StatusTypeDef ret = HAL_UART_Transmit(&huart3, query, sizeof(query), 1000);
+	if (ret != HAL_OK) {
+		send_log_error(ret);
+		return ret;
+	}
+	uint8_t setting[6] = { 0 };
+	ret = HAL_UART_Receive(&huart3, setting, sizeof(setting), 1000);
+	if (ret != HAL_OK) {
+		recv_log_error(ret);
+		return ret;
+	}
+	return HAL_OK;
 }
 
 /**
  * 设置无线芯片参数，使用定点模式
  */
+uint8_t setup_f = 0;
 HAL_StatusTypeDef set_p() {
-	wait_w();
+	//wait_w();
 	//设置模式
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_RESET); //M0
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, GPIO_PIN_SET); //M1
 	HAL_Delay(10); //等10ms
 	//设置地址和信道等
+	uint8_t setting[6] = { 0 };
 	setting[0] = 0xC0;
 	setting[1] = ADDR_H; //地址高字节
 	setting[2] = ADDR_L; //地址低字节
@@ -258,78 +276,52 @@ HAL_StatusTypeDef set_p() {
 	HAL_StatusTypeDef ret = HAL_UART_Transmit(&huart3, setting, sizeof(setting),
 			1000);
 	if (ret != HAL_OK) {
-		log_error(ret);
+		send_log_error(ret);
 		return ret;
 	}
-	ret = HAL_UART_Receive(&huart3, setting1, sizeof(setting1), 1000);
-	if (ret != HAL_OK) {
-		log_error(ret);
-		return ret;
-	}
+	HAL_UART_Receive(&huart3, setting, sizeof(setting), 1000); //接收返回，不做校验了
 	HAL_Delay(10); //等10ms
-	//查询设置
-	uint8_t query[3] = { 0xC1, 0xC1, 0xC1 };
-	ret = HAL_UART_Transmit(&huart3, query, sizeof(query), 1000);
-	if (ret != HAL_OK) {
-		log_error(ret);
-		return ret;
-	}
-	ret = HAL_UART_Receive(&huart3, setting2, sizeof(setting2), 1000);
-	if (ret != HAL_OK) {
-		log_error(ret);
-		return ret;
-	}
 	//发射模式
-	wait_w();
+	//wait_w();
 	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_RESET); //M0
 	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, GPIO_PIN_RESET); //M1
+	setup_f = 1;
 	return HAL_OK;
 }
 
 //永远都发送package size
 HAL_StatusTypeDef send_data(uint8_t addrh, uint8_t addrl, uint8_t ch,
 		data_type type, uint8_t *data, size_t len) {
-	data_pack dp = { 0 };
-	dp.client_id = CLIENT_ID;
-	dp.type = type;
-	dp.len = len;
-	memcpy(dp.data, data, len);
-	dp.crc = crc8(dp.data, len);
-	wait_w();
-	HAL_StatusTypeDef ret = HAL_UART_Transmit(&huart3, (uint8_t*) &dp,
-	HEAD_LEN + len, 1000);
-	if (ret != HAL_OK) {
-		log_error(ret);
+	send_buf.client_id = CLIENT_ID;
+	send_buf.type = type;
+	send_buf.len = len;
+	memcpy(send_buf.data, data, len);
+	send_buf.crc = crc8(send_buf.data, len);
+	if (send_buf.crc == 0) {
+		send_buf.crc = 111;
 	}
-	log_ok(type);
+	//wait_w();
+	HAL_StatusTypeDef ret = HAL_UART_Transmit_DMA(&huart3, (uint8_t*) &send_buf,
+	PACKAGE_LEN);
+	if (ret != HAL_OK) {
+		send_log_error(ret);
+	}
+	send_log_ok(type);
 	return ret;
 }
 
 HAL_StatusTypeDef send_data_to_server(data_type type, uint8_t *data, size_t len) {
-	return send_data(ADDR_H, ADDR_L, CHANNEL_NO, type,
-			data, len);
+	return send_data(ADDR_H, ADDR_L, CHANNEL_NO, type, data, len);
 }
 
-HAL_StatusTypeDef recv_data(data_pack *dp) {
-	//check_recv();
-	//__HAL_UART_FLUSH_DRREGISTER(&huart3);
-	HAL_StatusTypeDef ret = HAL_UART_Receive(&huart3, (uint8_t*) dp,
-	HEAD_LEN, 10000);
+HAL_StatusTypeDef recv_data(uint8_t reset) {
+	if (reset) __HAL_UART_FLUSH_DRREGISTER(&huart3);
+	HAL_StatusTypeDef ret = HAL_UART_Receive_DMA(&huart3, (uint8_t*) &recv_buf,
+	PACKAGE_LEN);
 	if (ret != HAL_OK) {
-		log_error(ret);
+		recv_log_error(ret);
 		return ret;
 	}
-	if (dp->len > MAX_DATA_LEN) { //肯定接受错误
-		size_cnt++;
-		return HAL_ERROR;
-	}
-	ret = HAL_UART_Receive(&huart3, (uint8_t*) dp->data, dp->len, 2000);
-	int crc = crc8(dp->data, dp->len);
-	if (crc != dp->crc) {
-		crc_cnt++;
-		return HAL_ERROR;
-	}
-	log_ok(dp->type);
 	return HAL_OK;
 }
 
@@ -373,8 +365,8 @@ HAL_StatusTypeDef send_current_data() {
 	data[1] = val[13];
 	data[2] = val[14];
 	data[3] = val[15];
-	HAL_StatusTypeDef ret = send_data_to_server(DATA_TYPE_CURRENT, (uint8_t*) data,
-			4 * sizeof(uint32_t));
+	HAL_StatusTypeDef ret = send_data_to_server(DATA_TYPE_CURRENT,
+			(uint8_t*) data, 4 * sizeof(uint32_t));
 
 	return ret;
 }
@@ -385,507 +377,230 @@ HAL_StatusTypeDef send_data_switch() {
 	if (_switch == 0) {
 		ret = send_pt100_flow_data();
 		_switch = 1;
-	}else {
+	} else {
 		ret = send_current_data();
 		_switch = 0;
 	}
 	return ret;
 }
 
+uint8_t pre_id(uint8_t me) {
+	if (me == 1) return CLIENT_NUM;
+	return me - 1;
+}
+
 uint8_t is_pre(uint8_t me, uint8_t pre) {
-	if (me == 1 && pre == CLIENT_NUM) return 1;
-	if (me == pre + 1) return 1;
-	return 0;
+	if (pre == 0) return 0;
+	return pre == pre_id(me);
 }
 
 /* USER CODE END 0 */
 
 /**
- * @brief  The application entry point.
- * @retval int
- */
-int main(void) {
+  * @brief  The application entry point.
+  * @retval int
+  */
+int main(void)
+{
 
-	/* USER CODE BEGIN 1 */
+  /* USER CODE BEGIN 1 */
 
-	/* USER CODE END 1 */
+  /* USER CODE END 1 */
 
-	/* MCU Configuration--------------------------------------------------------*/
+  /* MCU Configuration--------------------------------------------------------*/
 
-	/* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-	HAL_Init();
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  HAL_Init();
 
-	/* USER CODE BEGIN Init */
+  /* USER CODE BEGIN Init */
 
-	/* USER CODE END Init */
+  /* USER CODE END Init */
 
-	/* Configure the system clock */
-	SystemClock_Config();
+  /* Configure the system clock */
+  SystemClock_Config();
 
-	/* USER CODE BEGIN SysInit */
+  /* USER CODE BEGIN SysInit */
 
-	/* USER CODE END SysInit */
+  /* USER CODE END SysInit */
 
-	/* Initialize all configured peripherals */
-	MX_GPIO_Init();
-	MX_USART1_UART_Init();
-	MX_ADC1_Init();
-	MX_TIM2_Init();
-	MX_TIM3_Init();
-	MX_USART3_UART_Init();
-	MX_I2C1_Init();
-	MX_USB_PCD_Init();
-	/* USER CODE BEGIN 2 */
+  /* Initialize all configured peripherals */
+  MX_GPIO_Init();
+  MX_DMA_Init();
+  MX_USART1_UART_Init();
+  MX_ADC1_Init();
+  MX_TIM2_Init();
+  MX_TIM3_Init();
+  MX_USART3_UART_Init();
+  MX_I2C1_Init();
+  MX_USB_PCD_Init();
+  /* USER CODE BEGIN 2 */
 
-	/* USER CODE END 2 */
+  /* USER CODE END 2 */
 
-	/* Infinite loop */
-	/* USER CODE BEGIN WHILE */
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
 	HAL_Delay(1000);
 	while (set_p() != HAL_OK) {
 		HAL_Delay(100);
 	}
-	uint32_t last_recv_time = 0;
-	uint8_t last_recv_id = 0;
+
+	last_recv_time = HAL_GetTick();
+	last_recv_time_a[pre_id(CLIENT_ID)] = last_recv_time;
+	recv_data(0);
 	while (1) {
 #ifdef SERVER
-		//纯接收，再通过uart1转发出去
-		data_pack dp = { 0 };
-		HAL_StatusTypeDef r = recv_data(&dp);
-		if (r != HAL_OK) {
-			continue;
-		}
-		HAL_StatusTypeDef ret = HAL_UART_Transmit(&huart1, (uint8_t*) &dp,
-				HEAD_LEN + dp.len, 1000);
-		if (ret != HAL_OK) {
-			uart1_cnt++;
-		}
+		//不需要做事情了
 #else
-		//一直循环计时，事件驱动，当接受到数据，判断是不是自己的上一个，如果不是，继续等待接收，直到上一个到达
+		//一直循环计时，判断之前收到的消息id是不是自己的上一个，如果不是，继续等待接收，直到上一个到达
 		uint32_t now = HAL_GetTick();
-
-		data_pack dp = { 0 };
-		HAL_StatusTypeDef r = recv_data(&dp);
-		if (r == HAL_OK) {
-			last_recv_time = now;
-			last_recv_id = dp.client_id;
-			if (is_pre(CLIENT_ID, dp.client_id)) { //现在收到的是我的上一个
+		if (is_pre(CLIENT_ID, last_client_id)) { //现在收到的是我的上一个
+			if (last_send_time < last_recv_time_a[pre_id(CLIENT_ID) - 1]) { //是新收到的消息，这里不使用last_client_id，避免中间过程被中断改写
 				send_data_switch();
+				logger.send_ok_cnt ++;
+				last_send_time = now;
+			}
+		} else {
+			//不是上一个，则计算上一次收到的id和我的距离
+			uint32_t dist =
+					(last_client_id > CLIENT_ID) ?
+					CLIENT_NUM - last_client_id + CLIENT_ID :
+													CLIENT_ID - last_client_id;
+			if (now - MAX(last_recv_time, last_send_time) >= SEND_WAIT_TIME * dist) { //需要发送了
+				send_data_switch();
+				logger.send_ok_timeout_cnt++;
+				last_send_time = now;
 			}
 		}
-		//计算上一次收到的id和我的距离
-		uint32_t dist = (last_recv_id > CLIENT_ID) ? CLIENT_NUM - last_recv_id + CLIENT_ID : CLIENT_ID - last_recv_id;
-		if (now - last_recv_time >= SEND_WAIT_TIME * dist) { //需要发送了
-			send_data_switch();
-			last_recv_time = now;
-		}
 #endif
-		/* USER CODE END WHILE */
+    /* USER CODE END WHILE */
 
-		/* USER CODE BEGIN 3 */
+    /* USER CODE BEGIN 3 */
 	}
-	/* USER CODE END 3 */
+  /* USER CODE END 3 */
 }
 
 /**
- * @brief System Clock Configuration
- * @retval None
- */
-void SystemClock_Config(void) {
-	RCC_OscInitTypeDef RCC_OscInitStruct = { 0 };
-	RCC_ClkInitTypeDef RCC_ClkInitStruct = { 0 };
-	RCC_PeriphCLKInitTypeDef PeriphClkInit = { 0 };
-
-	/** Initializes the RCC Oscillators according to the specified parameters
-	 * in the RCC_OscInitTypeDef structure.
-	 */
-	RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
-	RCC_OscInitStruct.HSEState = RCC_HSE_ON;
-	RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
-	RCC_OscInitStruct.HSIState = RCC_HSI_ON;
-	RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
-	RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
-	RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL9;
-	if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK) {
-		Error_Handler();
-	}
-
-	/** Initializes the CPU, AHB and APB buses clocks
-	 */
-	RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK | RCC_CLOCKTYPE_SYSCLK
-			| RCC_CLOCKTYPE_PCLK1 | RCC_CLOCKTYPE_PCLK2;
-	RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
-	RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
-	RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
-	RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
-
-	if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK) {
-		Error_Handler();
-	}
-	PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC | RCC_PERIPHCLK_USB;
-	PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
-	PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_PLL_DIV1_5;
-	if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK) {
-		Error_Handler();
-	}
-}
-
-/**
- * @brief ADC1 Initialization Function
- * @param None
- * @retval None
- */
-static void MX_ADC1_Init(void) {
-
-	/* USER CODE BEGIN ADC1_Init 0 */
-
-	/* USER CODE END ADC1_Init 0 */
-
-	/* USER CODE BEGIN ADC1_Init 1 */
-
-	/* USER CODE END ADC1_Init 1 */
-
-	/** Common config
-	 */
-	hadc1.Instance = ADC1;
-	hadc1.Init.ScanConvMode = ADC_SCAN_DISABLE;
-	hadc1.Init.ContinuousConvMode = DISABLE;
-	hadc1.Init.DiscontinuousConvMode = DISABLE;
-	hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
-	hadc1.Init.DataAlign = ADC_DATAALIGN_RIGHT;
-	hadc1.Init.NbrOfConversion = 1;
-	if (HAL_ADC_Init(&hadc1) != HAL_OK) {
-		Error_Handler();
-	}
-	/* USER CODE BEGIN ADC1_Init 2 */
-
-	/* USER CODE END ADC1_Init 2 */
-
-}
-
-/**
- * @brief I2C1 Initialization Function
- * @param None
- * @retval None
- */
-static void MX_I2C1_Init(void) {
-
-	/* USER CODE BEGIN I2C1_Init 0 */
-
-	/* USER CODE END I2C1_Init 0 */
-
-	/* USER CODE BEGIN I2C1_Init 1 */
-
-	/* USER CODE END I2C1_Init 1 */
-	hi2c1.Instance = I2C1;
-	hi2c1.Init.ClockSpeed = 100000;
-	hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
-	hi2c1.Init.OwnAddress1 = 0;
-	hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
-	hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
-	hi2c1.Init.OwnAddress2 = 0;
-	hi2c1.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
-	hi2c1.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-	if (HAL_I2C_Init(&hi2c1) != HAL_OK) {
-		Error_Handler();
-	}
-	/* USER CODE BEGIN I2C1_Init 2 */
-
-	/* USER CODE END I2C1_Init 2 */
-
-}
-
-/**
- * @brief TIM2 Initialization Function
- * @param None
- * @retval None
- */
-static void MX_TIM2_Init(void) {
-
-	/* USER CODE BEGIN TIM2_Init 0 */
-
-	/* USER CODE END TIM2_Init 0 */
-
-	TIM_MasterConfigTypeDef sMasterConfig = { 0 };
-	TIM_OC_InitTypeDef sConfigOC = { 0 };
-
-	/* USER CODE BEGIN TIM2_Init 1 */
-
-	/* USER CODE END TIM2_Init 1 */
-	htim2.Instance = TIM2;
-	htim2.Init.Prescaler = 0;
-	htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim2.Init.Period = 65535;
-	htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-	if (HAL_TIM_PWM_Init(&htim2) != HAL_OK) {
-		Error_Handler();
-	}
-	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-	if (HAL_TIMEx_MasterConfigSynchronization(&htim2, &sMasterConfig)
-			!= HAL_OK) {
-		Error_Handler();
-	}
-	sConfigOC.OCMode = TIM_OCMODE_PWM1;
-	sConfigOC.Pulse = 0;
-	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-	if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_1)
-			!= HAL_OK) {
-		Error_Handler();
-	}
-	if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_2)
-			!= HAL_OK) {
-		Error_Handler();
-	}
-	if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_3)
-			!= HAL_OK) {
-		Error_Handler();
-	}
-	if (HAL_TIM_PWM_ConfigChannel(&htim2, &sConfigOC, TIM_CHANNEL_4)
-			!= HAL_OK) {
-		Error_Handler();
-	}
-	/* USER CODE BEGIN TIM2_Init 2 */
-
-	/* USER CODE END TIM2_Init 2 */
-	HAL_TIM_MspPostInit(&htim2);
-
-}
-
-/**
- * @brief TIM3 Initialization Function
- * @param None
- * @retval None
- */
-static void MX_TIM3_Init(void) {
-
-	/* USER CODE BEGIN TIM3_Init 0 */
-
-	/* USER CODE END TIM3_Init 0 */
-
-	TIM_MasterConfigTypeDef sMasterConfig = { 0 };
-	TIM_OC_InitTypeDef sConfigOC = { 0 };
-
-	/* USER CODE BEGIN TIM3_Init 1 */
-
-	/* USER CODE END TIM3_Init 1 */
-	htim3.Instance = TIM3;
-	htim3.Init.Prescaler = 0;
-	htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-	htim3.Init.Period = 65535;
-	htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-	htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-	if (HAL_TIM_PWM_Init(&htim3) != HAL_OK) {
-		Error_Handler();
-	}
-	sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
-	sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-	if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig)
-			!= HAL_OK) {
-		Error_Handler();
-	}
-	sConfigOC.OCMode = TIM_OCMODE_PWM1;
-	sConfigOC.Pulse = 0;
-	sConfigOC.OCPolarity = TIM_OCPOLARITY_HIGH;
-	sConfigOC.OCFastMode = TIM_OCFAST_DISABLE;
-	if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_1)
-			!= HAL_OK) {
-		Error_Handler();
-	}
-	if (HAL_TIM_PWM_ConfigChannel(&htim3, &sConfigOC, TIM_CHANNEL_2)
-			!= HAL_OK) {
-		Error_Handler();
-	}
-	/* USER CODE BEGIN TIM3_Init 2 */
-
-	/* USER CODE END TIM3_Init 2 */
-	HAL_TIM_MspPostInit(&htim3);
-
-}
-
-/**
- * @brief USART1 Initialization Function
- * @param None
- * @retval None
- */
-static void MX_USART1_UART_Init(void) {
-
-	/* USER CODE BEGIN USART1_Init 0 */
-
-	/* USER CODE END USART1_Init 0 */
-
-	/* USER CODE BEGIN USART1_Init 1 */
-
-	/* USER CODE END USART1_Init 1 */
-	huart1.Instance = USART1;
-	huart1.Init.BaudRate = 9600;
-	huart1.Init.WordLength = UART_WORDLENGTH_8B;
-	huart1.Init.StopBits = UART_STOPBITS_1;
-	huart1.Init.Parity = UART_PARITY_NONE;
-	huart1.Init.Mode = UART_MODE_TX_RX;
-	huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-	huart1.Init.OverSampling = UART_OVERSAMPLING_16;
-	if (HAL_UART_Init(&huart1) != HAL_OK) {
-		Error_Handler();
-	}
-	/* USER CODE BEGIN USART1_Init 2 */
-
-	/* USER CODE END USART1_Init 2 */
-
-}
-
-/**
- * @brief USART3 Initialization Function
- * @param None
- * @retval None
- */
-static void MX_USART3_UART_Init(void) {
-
-	/* USER CODE BEGIN USART3_Init 0 */
-
-	/* USER CODE END USART3_Init 0 */
-
-	/* USER CODE BEGIN USART3_Init 1 */
-
-	/* USER CODE END USART3_Init 1 */
-	huart3.Instance = USART3;
-	huart3.Init.BaudRate = 9600;
-	huart3.Init.WordLength = UART_WORDLENGTH_8B;
-	huart3.Init.StopBits = UART_STOPBITS_1;
-	huart3.Init.Parity = UART_PARITY_NONE;
-	huart3.Init.Mode = UART_MODE_TX_RX;
-	huart3.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-	huart3.Init.OverSampling = UART_OVERSAMPLING_16;
-	if (HAL_UART_Init(&huart3) != HAL_OK) {
-		Error_Handler();
-	}
-	/* USER CODE BEGIN USART3_Init 2 */
-
-	/* USER CODE END USART3_Init 2 */
-
-}
-
-/**
- * @brief USB Initialization Function
- * @param None
- * @retval None
- */
-static void MX_USB_PCD_Init(void) {
-
-	/* USER CODE BEGIN USB_Init 0 */
-
-	/* USER CODE END USB_Init 0 */
-
-	/* USER CODE BEGIN USB_Init 1 */
-
-	/* USER CODE END USB_Init 1 */
-	hpcd_USB_FS.Instance = USB;
-	hpcd_USB_FS.Init.dev_endpoints = 8;
-	hpcd_USB_FS.Init.speed = PCD_SPEED_FULL;
-	hpcd_USB_FS.Init.low_power_enable = DISABLE;
-	hpcd_USB_FS.Init.lpm_enable = DISABLE;
-	hpcd_USB_FS.Init.battery_charging_enable = DISABLE;
-	if (HAL_PCD_Init(&hpcd_USB_FS) != HAL_OK) {
-		Error_Handler();
-	}
-	/* USER CODE BEGIN USB_Init 2 */
-
-	/* USER CODE END USB_Init 2 */
-
-}
-
-/**
- * @brief GPIO Initialization Function
- * @param None
- * @retval None
- */
-static void MX_GPIO_Init(void) {
-	GPIO_InitTypeDef GPIO_InitStruct = { 0 };
-	/* USER CODE BEGIN MX_GPIO_Init_1 */
-	/* USER CODE END MX_GPIO_Init_1 */
-
-	/* GPIO Ports Clock Enable */
-	__HAL_RCC_GPIOC_CLK_ENABLE();
-	__HAL_RCC_GPIOD_CLK_ENABLE();
-	__HAL_RCC_GPIOA_CLK_ENABLE();
-	__HAL_RCC_GPIOB_CLK_ENABLE();
-
-	/*Configure GPIO pin Output Level */
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13 | GPIO_PIN_14 | GPIO_PIN_15,
-			GPIO_PIN_RESET);
-
-	/*Configure GPIO pin Output Level */
-	HAL_GPIO_WritePin(GPIOC, GPIO_PIN_12, GPIO_PIN_SET);
-
-	/*Configure GPIO pin Output Level */
-	HAL_GPIO_WritePin(GPIOD, GPIO_PIN_2, GPIO_PIN_SET);
-
-	/*Configure GPIO pin Output Level */
-	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_8 | GPIO_PIN_9,
-			GPIO_PIN_RESET);
-
-	/*Configure GPIO pins : PC13 PC14 PC15 PC12 */
-	GPIO_InitStruct.Pin = GPIO_PIN_13 | GPIO_PIN_14 | GPIO_PIN_15 | GPIO_PIN_12;
-	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-	HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
-	/*Configure GPIO pins : PB2 PB12 PB13 PB14
-	 PB15 */
-	GPIO_InitStruct.Pin = GPIO_PIN_2 | GPIO_PIN_12 | GPIO_PIN_13 | GPIO_PIN_14
-			| GPIO_PIN_15;
-	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-	/*Configure GPIO pins : PC8 PC9 */
-	GPIO_InitStruct.Pin = GPIO_PIN_8 | GPIO_PIN_9;
-	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
-
-	/*Configure GPIO pin : PA8 */
-	GPIO_InitStruct.Pin = GPIO_PIN_8;
-	GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
-
-	/*Configure GPIO pin : PD2 */
-	GPIO_InitStruct.Pin = GPIO_PIN_2;
-	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-	HAL_GPIO_Init(GPIOD, &GPIO_InitStruct);
-
-	/*Configure GPIO pins : PB4 PB5 PB8 PB9 */
-	GPIO_InitStruct.Pin = GPIO_PIN_4 | GPIO_PIN_5 | GPIO_PIN_8 | GPIO_PIN_9;
-	GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-	GPIO_InitStruct.Pull = GPIO_NOPULL;
-	GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-	HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-	/* USER CODE BEGIN MX_GPIO_Init_2 */
-	/* USER CODE END MX_GPIO_Init_2 */
+  * @brief System Clock Configuration
+  * @retval None
+  */
+void SystemClock_Config(void)
+{
+  RCC_OscInitTypeDef RCC_OscInitStruct = {0};
+  RCC_ClkInitTypeDef RCC_ClkInitStruct = {0};
+  RCC_PeriphCLKInitTypeDef PeriphClkInit = {0};
+
+  /** Initializes the RCC Oscillators according to the specified parameters
+  * in the RCC_OscInitTypeDef structure.
+  */
+  RCC_OscInitStruct.OscillatorType = RCC_OSCILLATORTYPE_HSE;
+  RCC_OscInitStruct.HSEState = RCC_HSE_ON;
+  RCC_OscInitStruct.HSEPredivValue = RCC_HSE_PREDIV_DIV1;
+  RCC_OscInitStruct.HSIState = RCC_HSI_ON;
+  RCC_OscInitStruct.PLL.PLLState = RCC_PLL_ON;
+  RCC_OscInitStruct.PLL.PLLSource = RCC_PLLSOURCE_HSE;
+  RCC_OscInitStruct.PLL.PLLMUL = RCC_PLL_MUL9;
+  if (HAL_RCC_OscConfig(&RCC_OscInitStruct) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** Initializes the CPU, AHB and APB buses clocks
+  */
+  RCC_ClkInitStruct.ClockType = RCC_CLOCKTYPE_HCLK|RCC_CLOCKTYPE_SYSCLK
+                              |RCC_CLOCKTYPE_PCLK1|RCC_CLOCKTYPE_PCLK2;
+  RCC_ClkInitStruct.SYSCLKSource = RCC_SYSCLKSOURCE_PLLCLK;
+  RCC_ClkInitStruct.AHBCLKDivider = RCC_SYSCLK_DIV1;
+  RCC_ClkInitStruct.APB1CLKDivider = RCC_HCLK_DIV2;
+  RCC_ClkInitStruct.APB2CLKDivider = RCC_HCLK_DIV1;
+
+  if (HAL_RCC_ClockConfig(&RCC_ClkInitStruct, FLASH_LATENCY_2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC|RCC_PERIPHCLK_USB;
+  PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
+  PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_PLL_DIV1_5;
+  if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
+  {
+    Error_Handler();
+  }
 }
 
 /* USER CODE BEGIN 4 */
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *uart) {
 
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *uart) {
+#ifdef SERVER
+	if (recv_buf.len > MAX_DATA_LEN) { //肯定接受错误
+		logger.recv_size_error_cnt++;
+		recv_data(1); //继续接收
+		return;
+	}
+	int crc = crc8(recv_buf.data, recv_buf.len);
+	if (!(crc == recv_buf.crc || (crc == 0 && recv_buf.crc == 111))) {
+		logger.recv_crc_error_cnt++;
+		recv_data(1); //继续接收
+		return;
+	}
+	if (recv_buf.client_id < 1 || recv_buf.client_id > CLIENT_NUM) { //clientid 错误
+		logger.recv_client_error_cnt++;
+		recv_data(1); //继续接收
+		return;
+	}
+	recv_log_ok(recv_buf.type);
+	logger.recv_cnt_by_client[recv_buf.client_id-1]++;
+	memcpy((void*)&send_buf, (void*)&recv_buf, PACKAGE_LEN);
+	recv_data(0);
+	HAL_StatusTypeDef ret = HAL_UART_Transmit_DMA(&huart1, (uint8_t*)&send_buf, PACKAGE_LEN);
+	if (ret != HAL_OK) {
+		logger.uart1_error_cnt++;
+	}
+#else
+	if (recv_buf.len > MAX_DATA_LEN) { //肯定接受错误
+		logger.recv_size_error_cnt++;
+		recv_data(1); //继续接收
+		return;
+	}
+	int crc = crc8(recv_buf.data, recv_buf.len);
+	if (!(crc == recv_buf.crc || (crc == 0 && recv_buf.crc == 111))) {
+		logger.recv_crc_error_cnt++;
+		recv_data(1); //继续接收
+		return;
+	}
+	if (recv_buf.client_id < 1 || recv_buf.client_id > CLIENT_NUM) { //clientid 错误
+		logger.recv_client_error_cnt++;
+		recv_data(1); //继续接收
+		return;
+	}
+	recv_log_ok(recv_buf.type);
+	last_client_id = recv_buf.client_id;
+	recv_data(0); //继续接收
+	logger.recv_cnt_by_client[last_client_id-1]++;
+	last_recv_time = HAL_GetTick();
+	last_recv_time_a[last_client_id - 1] = last_recv_time;
+#endif
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *uh) {
+	recv_data(1);
+	logger.recv_unknow_error_cnt ++;
+}
 /* USER CODE END 4 */
 
 /**
- * @brief  This function is executed in case of error occurrence.
- * @retval None
- */
-void Error_Handler(void) {
-	/* USER CODE BEGIN Error_Handler_Debug */
+  * @brief  This function is executed in case of error occurrence.
+  * @retval None
+  */
+void Error_Handler(void)
+{
+  /* USER CODE BEGIN Error_Handler_Debug */
 	/* User can add his own implementation to report the HAL error return state */
 	__disable_irq();
 	while (1) {
 	}
-	/* USER CODE END Error_Handler_Debug */
+  /* USER CODE END Error_Handler_Debug */
 }
 
 #ifdef  USE_FULL_ASSERT
