@@ -129,7 +129,7 @@ int main() {
     while (1) {
 		printf("START\n");
         n = read(fd, &ch, 1);
-		printf("READ 1\n");
+		printf("READ %d %d\n", n, ch);
         if (n > 0) {
 			printf("READ %d\n", ch);
             buffer[i++] = ch;
