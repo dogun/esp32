@@ -69,7 +69,7 @@ void SystemClock_Config(void);
  */
 
 #define SERVER
-#define CLIENT_ID 0x03
+#define CLIENT_ID 0x02
 #define CLIENT_NUM 3
 #define SEND_WAIT_TIME 2000
 
@@ -553,6 +553,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *uart) {
 	logger.recv_cnt_by_client[recv_buf.client_id-1]++;
 	memcpy((void*)&send_buf, (void*)&recv_buf, PACKAGE_LEN);
 	recv_data(0);
+	last_recv_time = HAL_GetTick();
 	HAL_StatusTypeDef ret = HAL_UART_Transmit_DMA(&huart1, (uint8_t*)&send_buf, PACKAGE_LEN);
 	if (ret != HAL_OK) {
 		logger.uart1_error_cnt++;
