@@ -94,7 +94,7 @@ int set_serial_params(int fd, int baudrate, int databits, int stopbits, char par
     options.c_oflag &= ~OPOST;
 
     // 设置读取超时时间
-    options.c_cc[VMIN] = 0;
+    options.c_cc[VMIN] = 1;
     options.c_cc[VTIME] = 10;
 
     if (tcsetattr(fd, TCSANOW, &options) != 0) {
