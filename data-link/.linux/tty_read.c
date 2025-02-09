@@ -127,8 +127,11 @@ int main() {
 	int i = 0;
 	char ch;
     while (1) {
+		printf("START\n");
         n = read(fd, &ch, 1);
+		printf("READ 1\n");
         if (n > 0) {
+			printf("READ %d\n", ch);
             buffer[i++] = ch;
 			if (ch == '\n') {
 				buffer[i] = 0;
@@ -136,6 +139,7 @@ int main() {
 				i = 0;
 			}
         } else if (n == -1) {
+			printf("READ ERROR %d\n", n);
             perror("read error");
             continue;
         }
