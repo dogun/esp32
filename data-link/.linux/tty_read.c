@@ -124,11 +124,17 @@ int main() {
     }
 
     // 循环读取串口数据
+	int i = 0;
+	char ch;
     while (1) {
-        n = read(fd, buffer, sizeof(buffer));
+        n = read(fd, &ch, 1);
         if (n > 0) {
-            buffer[n] = '\0';
-            printf("Received: %s\n", buffer);
+            buffer[i++] = ch;
+			if (ch == '\n') {
+				buffer[i] = 0;
+				printf("Received: %s\n", buffer);
+				i = 0;
+			}
         } else if (n == -1) {
             perror("read");
             break;
