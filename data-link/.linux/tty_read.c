@@ -138,7 +138,7 @@ int main() {
 				printf("Received: %s\n", buffer);
 				i = 0;
 			}
-        } else if (n == -1) {
+        } else {
 			printf("READ ERROR %d\n", n);
             perror("read error");
             continue;
