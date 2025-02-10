@@ -138,8 +138,9 @@ int main() {
 				printf("Received: %s\n", buffer);
 				i = 0;
 			}
-        } else if(n == 0) { 
+        } else if(n == 0) {
 			printf("READ 0\n");
+			sleep(100);
 		} else {
             perror("READ ERROR");
             break;
