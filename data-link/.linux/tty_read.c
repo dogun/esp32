@@ -140,7 +140,7 @@ int main() {
 			}
         } else if(n == 0) {
 			printf("READ 0\n");
-			sleep(100);
+			usleep(100000);
 		} else {
             perror("READ ERROR");
             break;
