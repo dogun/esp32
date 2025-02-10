@@ -95,7 +95,7 @@ int set_serial_params(int fd, int baudrate, int databits, int stopbits, char par
 
     // 设置读取超时时间
     options.c_cc[VMIN] = 1;
-    options.c_cc[VTIME] = 10;
+    options.c_cc[VTIME] = 100;
 
     if (tcsetattr(fd, TCSANOW, &options) != 0) {
         perror("tcsetattr");
@@ -138,10 +138,11 @@ int main() {
 				printf("Received: %s\n", buffer);
 				i = 0;
 			}
-        } else {
-			printf("READ ERROR %d\n", n);
-            perror("read error");
-            continue;
+        } else if(n == 0) { 
+			printf("READ 0\n");
+		} else {
+            perror("READ ERROR");
+            break;
         }
     }
 
