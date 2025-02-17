@@ -134,9 +134,8 @@ int main() {
 			close(fd);
 			return -1;
 		}
-		printf("available bytes: %d", bytes_available);
+		printf("available bytes: %d\n", bytes_available);
 		if (bytes_available == 0) {
-			usleep(100000);
 			continue;
 		}
 		n = read(fd, buffer, 200);
