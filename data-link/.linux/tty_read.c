@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <termios.h>
 #include <errno.h>
+#include <sys/ioctl.h>
 
 // 配置串口参数
 int set_serial_params(int fd, int baudrate, int databits, int stopbits, char parity) {
