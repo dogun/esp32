@@ -126,7 +126,6 @@ int main() {
 
     // 循环读取串口数据
     while (1) {
-		printf("START\n");
 		int bytes_available;
 		if (ioctl(fd, FIONREAD, &bytes_available) == -1) {
 			perror("ioctl");
@@ -136,6 +135,7 @@ int main() {
 		if (bytes_available == 0) {
 			continue;
 		}
+		printf("START\n");
 		printf("available bytes: %d\n", bytes_available);
 		n = read(fd, buffer, 200);
 		printf("READ %d\n", n);
