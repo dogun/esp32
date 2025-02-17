@@ -111,6 +111,7 @@ int main() {
     char buffer[256];
     ssize_t n;
 
+START:
     // 打开串口设备
     fd = open("/dev/ttyS0", O_RDONLY | O_NOCTTY);
     if (fd == -1) {
@@ -130,7 +131,8 @@ int main() {
 		if (ioctl(fd, FIONREAD, &bytes_available) == -1) {
 			perror("ioctl");
 			close(fd);
-			return -1;
+			goto START;
+			break;
 		}
 		if (bytes_available == 0) {
 			continue;
