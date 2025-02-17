@@ -127,6 +127,7 @@ START:
 
     // 循环读取串口数据
     while (1) {
+		/*
 		int bytes_available;
 		if (ioctl(fd, FIONREAD, &bytes_available) == -1) {
 			perror("ioctl");
@@ -137,16 +138,18 @@ START:
 		if (bytes_available == 0) {
 			continue;
 		}
+		*/
 		printf("START\n");
-		printf("available bytes: %d\n", bytes_available);
+		//printf("available bytes: %d\n", bytes_available);
 		n = read(fd, buffer, 200);
 		printf("READ %d\n", n);
         if (n > 0) {
 			buffer[n] = 0;
 			printf("Received: %s\n", buffer);
         } else if(n == 0) {
-			printf("READ 0\n");
-			usleep(100000);
+			perror("read 0");
+			close(fd);
+			goto START;
 		} else {
             perror("READ ERROR");
             break;
