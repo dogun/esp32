@@ -114,14 +114,14 @@ void write_data(char* data, int len) {
     time_t current_time = time(NULL);
     if (current_time == -1) {
         perror("Failed to get current time");
-        return 1;
+        return;
     }
 
     // 将时间戳转换为本地时间结构体
     struct tm *local_time = localtime(&current_time);
     if (local_time == NULL) {
         perror("Failed to convert to local time");
-        return 1;
+        return;
     }
 
     // 提取年、月、日信息
@@ -136,7 +136,7 @@ void write_data(char* data, int len) {
 	}else {
 		if (data_fd != NULL) fclose(data_fd);
 		strcpy(curr_file_name, file_name);
-		data_fd = fopen(data_file, "ab");
+		data_fd = fopen(file_name, "ab");
 		if (data_fd == NULL) {
 			perror("open file error");
 			return;
