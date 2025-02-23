@@ -155,7 +155,7 @@ void write_data(char* data, int len) {
 int main() {
     int fd;
     char buffer[1024];
-    ssize_t n;
+    int n;
 
 START:
     // 打开串口设备
