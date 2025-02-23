@@ -150,6 +150,7 @@ void write_data(char* data, int len) {
         fclose(data_fd);
         return;
     }
+	fflush(data_fd);
 }
 
 int main() {
