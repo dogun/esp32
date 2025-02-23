@@ -6,6 +6,7 @@
 #include <termios.h>
 #include <errno.h>
 #include <sys/ioctl.h>
+#include <time.h>
 
 // 配置串口参数
 int set_serial_params(int fd, int baudrate, int databits, int stopbits, char parity) {
@@ -106,9 +107,54 @@ int set_serial_params(int fd, int baudrate, int databits, int stopbits, char par
     return 0;
 }
 
+FILE* data_fd = NULL;
+char curr_file_name[16] = {0};
+void write_data(char* data, int len) {
+    // 获取当前时间的时间戳
+    time_t current_time = time(NULL);
+    if (current_time == -1) {
+        perror("Failed to get current time");
+        return 1;
+    }
+
+    // 将时间戳转换为本地时间结构体
+    struct tm *local_time = localtime(&current_time);
+    if (local_time == NULL) {
+        perror("Failed to convert to local time");
+        return 1;
+    }
+
+    // 提取年、月、日信息
+    int year = local_time->tm_year + 1900;
+    int month = local_time->tm_mon + 1;
+    int day = local_time->tm_mday;
+	
+	char file_name[16] = {0};
+	sprintf(file_name, "%04d%02d%02d.data", year, month, day);
+	if (strcmp(curr_file_name, file_name) == 0 && data_fd != NULL) {
+		//使用当前文件描述符
+	}else {
+		if (data_fd != NULL) fclose(data_fd);
+		strcpy(curr_file_name, file_name);
+		data_fd = fopen(data_file, "ab");
+		if (data_fd == NULL) {
+			perror("open file error");
+			return;
+		}
+	}
+	
+    // 写入二进制内容
+    size_t written = fwrite(data, len, sizeof(char), data_fd);
+    if (written != 1) {
+        perror("写入失败");
+        fclose(data_fd);
+        return;
+    }
+}
+
 int main() {
     int fd;
-    char buffer[256];
+    char buffer[1024];
     ssize_t n;
 
 START:
@@ -126,12 +172,14 @@ START:
     }
 
     // 循环读取串口数据
+	int index = 0;
     while (1) {
 		printf("START\n");
-		n = read(fd, buffer, 200);
+		n = read(fd, buffer + index, 200);
 		printf("READ %d\n", n);
         if (n > 0) {
-			buffer[n] = 0;
+			index += n;
+			buffer[index] = 0;
 			printf("Received: %s\n", buffer);
         } else if(n == 0) {
 			perror("read 0");
@@ -145,6 +193,8 @@ START:
 
     // 关闭串口设备
     close(fd);
+	// 关闭数据文件
+	fclose(data_fd);
 
     return 0;
 }
