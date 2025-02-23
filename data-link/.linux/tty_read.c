@@ -154,7 +154,7 @@ void write_data(char* data, int len) {
 
 int main() {
     int fd;
-    char buffer[1024];
+    char buffer[64];
     int n;
 
 START:
@@ -175,12 +175,15 @@ START:
 	int index = 0;
     while (1) {
 		printf("START\n");
-		n = read(fd, buffer + index, 200);
+		int read_len = sizeof(buffer) - index;
+		n = read(fd, buffer + index, read_len);
 		printf("READ %d\n", n);
         if (n > 0) {
 			index += n;
-			buffer[index] = 0;
-			printf("Received: %s\n", buffer);
+			if (index >= sizeof(buffer)) {
+				printf("Received: %s\n", buffer);
+				write_data(buffer, );
+			}
         } else if(n == 0) {
 			perror("read 0");
 			close(fd);
