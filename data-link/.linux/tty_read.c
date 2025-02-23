@@ -182,7 +182,8 @@ START:
 			index += n;
 			if (index >= sizeof(buffer)) {
 				printf("Received: %s\n", buffer);
-				write_data(buffer, );
+				write_data(buffer, index);
+				index = 0;
 			}
         } else if(n == 0) {
 			perror("read 0");
