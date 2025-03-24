@@ -167,10 +167,10 @@ void write_data(char* data, int len) {
 	uint8_t client_id = data[0];
 	uint8_t type = data[1];
 	uint8_t crc = data[2];
-	uint8_t len = data[3];
-	uint8_t crc1 = crc8(data + 4, len);
+	uint8_t l = data[3];
+	uint8_t crc1 = crc8(data + 4, l);
 	if (crc != crc1) {
-		printf("data error crc: %d, crc1: %d, len: %d, client: %d, type: %d\n", crc, crc1, len, client_id, type);
+		printf("data error crc: %d, crc1: %d, len: %d, client: %d, type: %d\n", crc, crc1, l, client_id, type);
 		return;
 	}
 	
@@ -185,7 +185,7 @@ void write_data(char* data, int len) {
     }
 	int i = 0;
 	uint32_t* b = (uint32_t*)(data + 4);
-	for (i = 0; i < len / 4; ++i) {
+	for (i = 0; i < l / 4; ++i) {
 		memset(wbuf, 0, sizeof(wbuf));
 		sprintf(wbuf, ",%d", b[i]);
 		written = fwrite(wbuf, sizeof(char), strlen(wbuf), data_fd);
