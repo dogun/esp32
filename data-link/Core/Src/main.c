@@ -68,16 +68,19 @@ void SystemClock_Config(void);
  * 采用透传模式，共支持10个客户端，全部采用FF信道，但是定义各自的ID，互相协同，按照顺序分别发送
  */
 
-#define SERVER
-#define CLIENT_ID 0x02
+//#define SERVER
+#define CLIENT_ID 0x01
 #define CLIENT_NUM 3
 #define SEND_WAIT_TIME 2000
+
+#define S_1 0x10
+#define S_2 0x24
 
 #define ADDR_H 0xFF
 #define ADDR_L 0xFF
 #define CHANNEL_NO 0x2E
 
-#define HEAD_LEN 4
+#define HEAD_LEN 6
 #define PACKAGE_LEN 54
 #define MAX_DATA_LEN PACKAGE_LEN - HEAD_LEN
 
@@ -89,6 +92,8 @@ typedef enum {
 } data_type;
 
 typedef struct _DATA_PACK {
+	uint8_t s_1; //0x10
+	uint8_t s_2; //0x24
 	uint8_t client_id;
 	uint8_t type; //数据类型
 	uint8_t crc;
@@ -97,6 +102,7 @@ typedef struct _DATA_PACK {
 } data_pack;
 
 typedef struct _DATA_LOGGER {
+	uint32_t recv_s_error_cnt;
 	uint32_t recv_cnt_by_client[10];
 	uint32_t recv_ok_cnt_1;
 	uint32_t recv_ok_cnt_2;
@@ -292,6 +298,8 @@ HAL_StatusTypeDef set_p() {
 //永远都发送package size
 HAL_StatusTypeDef send_data(uint8_t addrh, uint8_t addrl, uint8_t ch,
 		data_type type, uint8_t *data, size_t len) {
+	send_buf.s_1 = S_1;
+	send_buf.s_2 = S_2;
 	send_buf.client_id = CLIENT_ID;
 	send_buf.type = type;
 	send_buf.len = len;
@@ -531,25 +539,34 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *uart) {
 
 }
 
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *uart) {
-#ifdef SERVER
+HAL_StatusTypeDef check_pack() {
 	if (recv_buf.len > MAX_DATA_LEN) { //肯定接受错误
 		logger.recv_size_error_cnt++;
-		recv_data(1); //继续接收
-		return;
+		return HAL_ERROR;
+	}
+	if (recv_buf.s_1 != S_1 || recv_buf.s_2 != S_2) { //数据错乱
+		logger.recv_s_error_cnt++;
+		return HAL_ERROR;
 	}
 	int crc = crc8(recv_buf.data, recv_buf.len);
 	if (!(crc == recv_buf.crc || (crc == 0 && recv_buf.crc == 111))) {
 		logger.recv_crc_error_cnt++;
-		recv_data(1); //继续接收
-		return;
+		return HAL_ERROR;
 	}
 	if (recv_buf.client_id < 1 || recv_buf.client_id > CLIENT_NUM) { //clientid 错误
 		logger.recv_client_error_cnt++;
+		return HAL_ERROR;
+	}
+	return HAL_OK;
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *uart) {
+	if (check_pack() != HAL_OK) {
 		recv_data(1); //继续接收
 		return;
 	}
 	recv_log_ok(recv_buf.type);
+#ifdef SERVER
 	logger.recv_cnt_by_client[recv_buf.client_id-1]++;
 	memcpy((void*)&send_buf, (void*)&recv_buf, PACKAGE_LEN);
 	recv_data(0);
@@ -559,23 +576,6 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *uart) {
 		logger.uart1_error_cnt++;
 	}
 #else
-	if (recv_buf.len > MAX_DATA_LEN) { //肯定接受错误
-		logger.recv_size_error_cnt++;
-		recv_data(1); //继续接收
-		return;
-	}
-	int crc = crc8(recv_buf.data, recv_buf.len);
-	if (!(crc == recv_buf.crc || (crc == 0 && recv_buf.crc == 111))) {
-		logger.recv_crc_error_cnt++;
-		recv_data(1); //继续接收
-		return;
-	}
-	if (recv_buf.client_id < 1 || recv_buf.client_id > CLIENT_NUM) { //clientid 错误
-		logger.recv_client_error_cnt++;
-		recv_data(1); //继续接收
-		return;
-	}
-	recv_log_ok(recv_buf.type);
 	last_client_id = recv_buf.client_id;
 	recv_data(0); //继续接收
 	logger.recv_cnt_by_client[last_client_id-1]++;

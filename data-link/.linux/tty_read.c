@@ -8,6 +8,25 @@
 #include <sys/ioctl.h>
 #include <time.h>
 
+uint8_t crc8(const uint8_t *data, size_t length) {
+	uint8_t polynomial = 0x07;
+	uint8_t initial_value = 0x00;
+
+	uint8_t crc = initial_value;
+	for (int i = 0; i < length; i++) {
+		crc ^= data[i];
+		for (int j = 0; j < 8; j++) {
+			if (crc & 0x80) {
+				crc = (crc << 1) ^ polynomial;
+			} else {
+				crc <<= 1;
+			}
+		}
+	}
+	return crc;
+}
+
+
 // 配置串口参数
 int set_serial_params(int fd, int baudrate, int databits, int stopbits, char parity) {
     struct termios options;
@@ -136,27 +155,73 @@ void write_data(char* data, int len) {
 	}else {
 		if (data_fd != NULL) fclose(data_fd);
 		strcpy(curr_file_name, file_name);
-		data_fd = fopen(file_name, "ab");
+		data_fd = fopen(file_name, "a");
 		if (data_fd == NULL) {
 			perror("open file error");
 			return;
 		}
 	}
 	
-    // 写入二进制内容
-    size_t written = fwrite(data, len, sizeof(char), data_fd);
-    if (written != 1) {
+	//解析包
+	uint8_t client_id = data[0];
+	uint8_t type = data[1];
+	uint8_t crc = data[2];
+	uint8_t len = data[3];
+	uint8_t crc1 = crc8(data + 4, len);
+	if (crc != crc1) {
+		printf("data error crc: %d, crc1: %d, len: %d, client: %d, type: %d\n", crc, crc1, len, client_id, type);
+		return;
+	}
+	
+    // 写入内容
+	char wbuf[64] = {0};
+	sprintf(wbuf, "%ld: %d,%d", current_time, client_id, type);
+    size_t written = fwrite(wbuf, sizeof(char), strlen(wbuf), data_fd);
+    if (written != strlen(wbuf)) {
         perror("写入失败");
         fclose(data_fd);
         return;
     }
+	int i = 0;
+	uint32_t* b = (uint32_t*)(data + 4);
+	for (i = 0; i < len / 4; ++i) {
+		memset(wbuf, 0, sizeof(wbuf));
+		sprintf(wbuf, ",%d", b[i]);
+		written = fwrite(wbuf, sizeof(char), strlen(wbuf), data_fd);
+		if (written != strlen(wbuf)) {
+			perror("写入失败1");
+			fclose(data_fd);
+			return;
+		}
+	}
+	memset(wbuf, 0, sizeof(wbuf));
+	sprintf(wbuf, "\n");
+	written = fwrite(wbuf, sizeof(char), strlen(wbuf), data_fd);
+	if (written != strlen(wbuf)) {
+		perror("写入失败2");
+		fclose(data_fd);
+		return;
+	}
+	
 	fflush(data_fd);
+}
+
+int read_one(int fd, char* bf) {
+	int n = 0;
+	memset(bf, 0, 1);
+	n = read(fd, bf, 1);
+	return n;
 }
 
 int main() {
     int fd;
-    char buffer[64];
+    char buffer[128];
+	int buffer_p = 0;
+	char rb[1];
     int n;
+	
+	char a = 0x10;
+	char b = 0x24;
 
 START:
     // 打开串口设备
@@ -175,16 +240,25 @@ START:
     // 循环读取串口数据
 	int index = 0;
     while (1) {
-		printf("START\n");
-		int read_len = sizeof(buffer) - index;
-		n = read(fd, buffer + index, read_len);
-		printf("READ %d\n", n);
-        if (n > 0) {
-			index += n;
-			if (index >= sizeof(buffer)) {
-				printf("Received: %s\n", buffer);
-				write_data(buffer, index);
-				index = 0;
+		//printf("START\n");
+		n = read_one(fd, rb);
+		//printf("READ %d\n", n);
+        if (n == 1) {
+			if (rb[0] == a) {
+				n = read_one(fd, rb);
+				if (rb[0] == b) { //是包头
+					//先保存老包
+					write_data(buffer, buffer_p);
+					//清空buffer，位置置0
+					memset(buffer, 0, sizeof(buffer));
+					buffer_p = 0;
+				} else {
+					//不是包头，放入buffer
+					buffer[buffer_p++] = a;
+					buffer[buffer_p++] = rb[0];
+				}
+			}else {
+				buffer[buffer_p++] = rb[0];
 			}
         } else if(n == 0) {
 			perror("read 0");
