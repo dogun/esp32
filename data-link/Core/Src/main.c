@@ -68,8 +68,8 @@ void SystemClock_Config(void);
  * 采用透传模式，共支持10个客户端，全部采用FF信道，但是定义各自的ID，互相协同，按照顺序分别发送
  */
 
-//#define SERVER
-#define CLIENT_ID 0x01
+#define SERVER
+#define CLIENT_ID 0x02
 #define CLIENT_NUM 3
 #define SEND_WAIT_TIME 2000
 

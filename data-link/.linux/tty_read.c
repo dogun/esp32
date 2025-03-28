@@ -169,7 +169,7 @@ void write_data(char* data, int len) {
 	uint8_t crc = data[2];
 	uint8_t l = data[3];
 	uint8_t crc1 = crc8(data + 4, l);
-	if (crc != crc1) {
+	if (!(crc == crc1 || (crc1 == 0 && crc == 111))) {
 		printf("data error crc: %d, crc1: %d, len: %d, client: %d, type: %d\n", crc, crc1, l, client_id, type);
 		return;
 	}
