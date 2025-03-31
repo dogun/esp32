@@ -266,6 +266,7 @@ START:
 			close(fd);
 			goto START;
 		} else {
+			printf("%d\n", n);
             perror("READ ERROR");
             break;
         }
