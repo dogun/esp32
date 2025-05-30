@@ -1,6 +1,6 @@
 <?php
 $ts = intval($_GET['ts']);
-$board = intval($_GET['borad']);
+$board = intval($_GET['board']);
 $type = intval($_GET['type']);
 $pt100 = intval($_GET['pt100']);
 $pt101 = intval($_GET['pt101']);
