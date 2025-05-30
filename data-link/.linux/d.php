@@ -16,10 +16,16 @@ $current2 = intval($_GET['current2']);
 $current3 = intval($_GET['current3']);
 $current4 = intval($_GET['current4']);
 
-		$params = "ts=$ts&board=$board&type=$type&pt100=$pt100&pt101=$pt101&pt102=$pt102&pt103=$pt103&flow1=$flow1&flow2=$flow2&flow3=$flow3&flow4=$flow4&current1=$current1&current2=$current2&current3=$current3&current4=$current4";
-		
-		echo $params."\n";
+include('pw.php');
+$mysqli = new mysqli('localhost', 'root', $pw, 'dofu');
 
-
+$q = $mysqli->query("select * from sensor where board_no=$board and type=$type and timestamp=$ts");
+$r = $q->fetch_assoc();
+if ($r) {
+	echo 'ex';
+	die;
+}
+$q = $mysqli->query("insert into sensor (board_no,type,timestamp,pt100,pt101,pt102,pt103,flow1,flow2,flow3,flow4,current1,current2,current3,current4) values ($board, $type, $ts, $pt100, $pt101, $pt102, $pt103, $flow1, $flow2, $flow3, $flow4, $current1, $current2, $current3, $current4)");
+echo $q;
 ?>
 
