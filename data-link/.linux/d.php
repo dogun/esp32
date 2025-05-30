@@ -17,7 +17,7 @@ $current3 = intval($_GET['current3']);
 $current4 = intval($_GET['current4']);
 
 include('pw.php');
-$mysqli = new mysqli('localhost', 'root', $pw, 'dofu');
+$mysqli = new mysqli('localhost', 'root', $pw, 'tofu');
 
 $q = $mysqli->query("select * from sensor where board_no=$board and type=$type and timestamp=$ts");
 $r = $q->fetch_assoc();
