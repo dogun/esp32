@@ -22,7 +22,7 @@ $mysqli = new mysqli('localhost', 'root', $pw, 'tofu');
 $q = $mysqli->query("select * from sensor where board_no=$board and type=$type and timestamp=$ts");
 $r = $q->fetch_assoc();
 if ($r) {
-	echo 'ex';
+	echo "ex\n";
 	die;
 }
 $q = $mysqli->query("insert into sensor (board_no,type,timestamp,pt100,pt101,pt102,pt103,flow1,flow2,flow3,flow4,current1,current2,current3,current4) values ($board, $type, $ts, $pt100, $pt101, $pt102, $pt103, $flow1, $flow2, $flow3, $flow4, $current1, $current2, $current3, $current4)");
