@@ -1,6 +1,7 @@
 <?php
+date_default_timezone_set('Asia/Hong_Kong');
 $pos_r = array();
-$offset = 86400;
+$offset = 0;
 while (true) {
 	$time = time() - $offset;
 	$now = date('Ymd', $time);
