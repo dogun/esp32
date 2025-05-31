@@ -1,44 +1,36 @@
 <?php
+date_default_timezone_set('Asia/Hong_Kong');
+
 include('pw.php');
 $mysqli = new mysqli('localhost', 'root', $pw, 'tofu');
 
-// 模拟数据库查询函数
-function mockDatabaseQuery($board, $date, $sensors) {
-    // 生成24小时的时间点（每小时一个数据点）
-    $timestamps = [];
-    for ($hour = 0; $hour < 24; $hour++) {
-        $timestamps[] = sprintf("%02d:00", $hour);
-    }
-    
-    // 模拟温度数据
-    $data = [];
-    foreach ($sensors as $sensor) {
-        $sensorData = [];
-        $baseTemp = rand(20, 25); // 每个传感器的基础温度
-        
-        foreach ($timestamps as $time) {
-            // 生成温度波动
-            $fluctuation = rand(-5, 5) / 10;
-            $temperature = $baseTemp + $fluctuation;
-            $sensorData[] = round($temperature, 1);
-        }
-        
-        $data[$sensor] = $sensorData;
-    }
-    
-    return [
-        'timestamps' => $timestamps,
-        'data' => $data
-    ];
+// 处理表单提交
+$b = isset($_POST['board']) ? $_POST['board'] : '1';
+$d = isset($_POST['date']) ? $_POST['date'] : date('Y-m-d');
+$s = isset($_POST['sensor']) ? $_POST['sensor'] : 'pt100';
+
+$b = intval($b);
+
+$q = $mysqli->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'tofu' AND TABLE_NAME = 'sensor'");
+$cs = array();
+while (($row = $q->fetch_assoc()) != NULL) {
+	$cs[] = $row['COLUMN_NAME'];
 }
 
-// 处理表单提交
-$selectedBoard = isset($_POST['board']) ? $_POST['board'] : '1';
-$selectedDate = isset($_POST['date']) ? $_POST['date'] : date('Y-m-d');
-$selectedSensors = isset($_POST['sensors']) ? $_POST['sensors'] : ['pt100'];
+$stime = strtotime($d.' 0:0:0');
+$etime = strtotime($d.' 23:59:59');
 
-// 获取模拟数据
-$chartData = mockDatabaseQuery($selectedBoard, $selectedDate, $selectedSensors);
+$type = 0;
+if (strstr($s, 'current')) {
+	$type = 1;
+}
+
+$q = $mysqli->query("select timestamp, $s from sensor where timestamp >= $stime and timestamp <= $etime and type=$type and board=$board order by timestamp asc");
+$data = array();
+while (($row = $q->fetch_assoc()) != NULL) {
+	$data[$row['timestamp']] = $row[$s];
+}
+
 ?>
 
 <!DOCTYPE html>
@@ -291,8 +283,8 @@ $chartData = mockDatabaseQuery($selectedBoard, $selectedDate, $selectedSensors);
 <body>
     <div class="container">
         <header>
-            <h1>温度传感器数据可视化</h1>
-            <p class="subtitle">实时监控和分析PT100系列传感器的温度数据，支持按板子、日期和传感器筛选</p>
+            <h1>传感器数据</h1>
+            <p class="subtitle">支持按板子、日期和传感器筛选</p>
         </header>
         
         <form method="POST">
@@ -346,7 +338,7 @@ $chartData = mockDatabaseQuery($selectedBoard, $selectedDate, $selectedSensors);
                 
                 <div class="chart-container">
                     <div class="chart-header">
-                        <h2 class="chart-title">温度变化曲线图</h2>
+                        <h2 class="chart-title">数据变化曲线图</h2>
                         <div class="chart-info">
                             <?= $selectedDate ?> | <?= $selectedBoard ?>号板
                         </div>
@@ -378,108 +370,5 @@ $chartData = mockDatabaseQuery($selectedBoard, $selectedDate, $selectedSensors);
             <p>温度传感器数据可视化系统 &copy; <?= date('Y') ?> | 模拟数据展示</p>
         </footer>
     </div>
-    
-    <script>
-        // 从PHP获取数据
-        const chartData = <?= json_encode($chartData) ?>;
-        const selectedSensors = <?= json_encode($selectedSensors) ?>;
-        
-        // 准备图表数据
-        const datasets = [];
-        const colors = {
-            'pt100': '#FF6384',
-            'pt101': '#36A2EB',
-            'pt102': '#4BC0C0'
-        };
-        
-        selectedSensors.forEach(sensor => {
-            datasets.push({
-                label: sensor.toUpperCase() + ' 温度',
-                data: chartData.data[sensor],
-                borderColor: colors[sensor],
-                backgroundColor: colors[sensor] + '20',
-                borderWidth: 3,
-                pointRadius: 4,
-                pointBackgroundColor: colors[sensor],
-                tension: 0.3,
-                fill: false
-            });
-        });
-        
-        // 创建图表
-        const ctx = document.getElementById('temperatureChart').getContext('2d');
-        const chart = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: chartData.timestamps,
-                datasets: datasets
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    legend: {
-                        labels: {
-                            color: 'rgba(255, 255, 255, 0.9)',
-                            font: {
-                                size: 14
-                            }
-                        }
-                    },
-                    tooltip: {
-                        mode: 'index',
-                        intersect: false,
-                        backgroundColor: 'rgba(30, 30, 50, 0.9)',
-                        titleColor: '#fff',
-                        bodyColor: '#fff',
-                        borderColor: 'rgba(255, 255, 255, 0.1)',
-                        borderWidth: 1
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                        },
-                        ticks: {
-                            color: 'rgba(255, 255, 255, 0.7)',
-                            maxRotation: 0,
-                            autoSkip: true,
-                            maxTicksLimit: 12
-                        },
-                        title: {
-                            display: true,
-                            text: '时间',
-                            color: 'rgba(255, 255, 255, 0.8)',
-                            font: {
-                                size: 14
-                            }
-                        }
-                    },
-                    y: {
-                        grid: {
-                            color: 'rgba(255, 255, 255, 0.1)'
-                        },
-                        ticks: {
-                            color: 'rgba(255, 255, 255, 0.7)'
-                        },
-                        title: {
-                            display: true,
-                            text: '温度 (°C)',
-                            color: 'rgba(255, 255, 255, 0.8)',
-                            font: {
-                                size: 14
-                            }
-                        }
-                    }
-                },
-                interaction: {
-                    mode: 'nearest',
-                    axis: 'x',
-                    intersect: false
-                }
-            }
-        });
-    </script>
 </body>
 </html>
