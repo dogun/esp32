@@ -63,7 +63,7 @@ while (true) {
 		//echo "$ts $board $type $pt100 $pt101 $pt102 $pt103 $flow1 $flow2 $flow3 $flow4 $current1 $current2 $current3 $current4\n";
 		$params = "ts=$ts&board=$board&type=$type&pt100=$pt100&pt101=$pt101&pt102=$pt102&pt103=$pt103&flow1=$flow1&flow2=$flow2&flow3=$flow3&flow4=$flow4&current1=$current1&current2=$current2&current3=$current3&current4=$current4";
 		$url = "http://yueyue.com/dl/d.php?$params";
-		echo date('Y-m-d H:i:s', $ds);
+		echo date('Y-m-d H:i:s', $ts);
 		echo ':';
 		echo file_get_contents($url);
 	}else {
