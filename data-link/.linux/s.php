@@ -36,6 +36,7 @@ foreach ($s as $sn) {
 }
 
 $sql = "select timestamp, type $ss as data from sensor where timestamp >= $stime and timestamp <= $etime and board_no=$b order by timestamp asc";
+echo $sql;
 $q = $mysqli->query($sql);
 $data = array();
 while (($row = $q->fetch_assoc()) != NULL) {
