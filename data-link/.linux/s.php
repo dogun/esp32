@@ -6,7 +6,7 @@ function pt($v, $b = 0, $s = 'PT') {
 	$c_data[0]['PT']['vol'] = 3.3;
 	
 	$c_data[1]['pt100']['R150'] = 153;
-	$c_data[1]['pt100']['vol'] = 3.25;
+	$c_data[1]['pt100']['vol'] = 3.2;
 	
 	$r150 = $c_data[$b][$s]['R150'];
 	$vol = $c_data[$b][$s]['vol'];
