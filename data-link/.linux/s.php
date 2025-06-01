@@ -36,7 +36,7 @@ foreach ($s as $sn) {
 }
 
 $sql = "select timestamp, type $ss from sensor where timestamp >= $stime and timestamp <= $etime and board_no=$b order by timestamp asc";
-echo $sql;
+//echo $sql;
 $q = $mysqli->query($sql);
 $data = array();
 while (($row = $q->fetch_assoc()) != NULL) {
@@ -52,15 +52,25 @@ while (($row = $q->fetch_assoc()) != NULL) {
 	}
 }
 
+$times = array();
+$datas = array();
 foreach ($data as $sn => $row) {
+	$datas[$sn] = array();
 	foreach ($data[$sn] as $m=>$row1) {
+		if (!in_array($m, $times)) $times[] = $m;
 		$data[$sn][$m]['val'] = $row1['total'] / $row1['cnt'];
 		if (strstr($sn, 'pt10')) {
 			$data[$sn][$m]['val'] = pt($data[$sn][$m]['val']);
 		}
-		echo $sn.' '.$m.' '.$data[$sn][$m]['val']."\n";
+		$datas[$sn][] = $data[$sn][$m]['val'];
+		//echo $sn.' '.$m.' '.$data[$sn][$m]['val']."\n";
 	}
 }
+
+$js_data = [
+        'timestamps' => $times,
+        'data' => $datas
+    ];
 ?>
 
 <!-- 
@@ -405,5 +415,108 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
             <p>传感器数据可视化系统 &copy; <?= date('Y') ?> | 数据展示</p>
         </footer>
     </div>
+    
+    <script>
+        // 从PHP获取数据
+        const chartData = <?= json_encode($js_data) ?>;
+        const selectedSensors = <?= json_encode($s) ?>;
+        
+        // 准备图表数据
+        const datasets = [];
+        const colors = {
+            'pt100': '#FF6384',
+            'pt101': '#36A2EB',
+            'pt102': '#4BC0C0'
+        };
+        
+        selectedSensors.forEach(sensor => {
+            datasets.push({
+                label: sensor.toUpperCase() + ' 温度',
+                data: chartData.data[sensor],
+                borderColor: colors[sensor],
+                backgroundColor: colors[sensor] + '20',
+                borderWidth: 3,
+                pointRadius: 4,
+                pointBackgroundColor: colors[sensor],
+                tension: 0.3,
+                fill: false
+            });
+        });
+        
+        // 创建图表
+        const ctx = document.getElementById('temperatureChart').getContext('2d');
+        const chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: chartData.timestamps,
+                datasets: datasets
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        labels: {
+                            color: 'rgba(255, 255, 255, 0.9)',
+                            font: {
+                                size: 14
+                            }
+                        }
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false,
+                        backgroundColor: 'rgba(30, 30, 50, 0.9)',
+                        titleColor: '#fff',
+                        bodyColor: '#fff',
+                        borderColor: 'rgba(255, 255, 255, 0.1)',
+                        borderWidth: 1
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: 'rgba(255, 255, 255, 0.7)',
+                            maxRotation: 0,
+                            autoSkip: true,
+                            maxTicksLimit: 12
+                        },
+                        title: {
+                            display: true,
+                            text: '时间',
+                            color: 'rgba(255, 255, 255, 0.8)',
+                            font: {
+                                size: 14
+                            }
+                        }
+                    },
+                    y: {
+                        grid: {
+                            color: 'rgba(255, 255, 255, 0.1)'
+                        },
+                        ticks: {
+                            color: 'rgba(255, 255, 255, 0.7)'
+                        },
+                        title: {
+                            display: true,
+                            text: '温度 (°C)',
+                            color: 'rgba(255, 255, 255, 0.8)',
+                            font: {
+                                size: 14
+                            }
+                        }
+                    }
+                },
+                interaction: {
+                    mode: 'nearest',
+                    axis: 'x',
+                    intersect: false
+                }
+            }
+        });
+    </script>
 </body>
 </html>
