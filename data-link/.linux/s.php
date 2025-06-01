@@ -1,6 +1,13 @@
 <?php
 date_default_timezone_set('Asia/Hong_Kong');
 
+function pt($v) {
+	$v = $v*150/(4096-$v);
+	$v = ($v-100)/0.3908-($v-100)*($v-100)/2.46e6;
+	return $v;
+}
+
+
 include('pw.php');
 $mysqli = new mysqli('localhost', 'root', $pw, 'tofu');
 
@@ -43,7 +50,15 @@ while (($row = $q->fetch_assoc()) != NULL) {
 	}
 }
 
-print_r($data);
+foreach ($data as $sn => $row) {
+	foreach ($data[$sn] as $m=>$row1) {
+		$data[$sn][$m]['val'] = $row1['total'] / $row1['cnt'];
+		if (strstr($sn, 'pt10')) {
+			$data[$sn][$m]['val'] = pt($data[$sn][$m]['val']);
+		}
+		echo $sn.' '.$m.' '.$data[$sn][$m]['val']."\n";
+	}
+}
 ?>
 
 <!-- 
