@@ -23,21 +23,27 @@ while (($row = $q->fetch_assoc()) != NULL) {
 $stime = strtotime($d.' 0:0:0');
 $etime = strtotime($d.' 23:59:59');
 
-$type = 0;
-//if (strstr($s, 'current')) {
-//	$type = 1;
-//}
-
 $ss = '';
 foreach ($s as $sn) {
 	$ss .= ", $sn";
 }
 
-$q = $mysqli->query("select timestamp $ss as data from sensor where timestamp >= $stime and timestamp <= $etime and type=$type and board_no=$b order by timestamp asc");
+$q = $mysqli->query("select timestamp, type $ss as data from sensor where timestamp >= $stime and timestamp <= $etime and board_no=$b order by timestamp asc");
 $data = array();
 while (($row = $q->fetch_assoc()) != NULL) {
-	$data[$row['timestamp']] = $row;
+	$m = date('H:i', $row['timestamp']);
+	$t = $row['type'];
+	foreach ($s as $sn) {
+		if (strstr($sn, 'current') && $t == 0) continue;
+		if (!strstr($sn, 'current') && $t == 1) continue;
+		if (!@$data[$sn]) $data[$sn] = array();
+		if (!@$data[$sn][$m]) $data[$sn][$m] = ['cnt' => 0, 'total' => 0];
+		$data[$sn][$m]['cnt'] ++;
+		$data[$sn][$m]['total'] += $row[$sn];
+	}
 }
+
+print_r($data);
 ?>
 
 <!-- 
