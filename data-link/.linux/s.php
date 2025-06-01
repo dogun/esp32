@@ -3,7 +3,8 @@ date_default_timezone_set('Asia/Hong_Kong');
 
 function pt($v) {
 	$v = $v*150/(4095-$v);
-	$v = ($v-100)/0.3908-($v-100)*($v-100)/2.46e6;
+	//$v = ($v-100)/0.3908-($v-100)*($v-100)/2.46e6;
+	$v = ($v-100)/0.384;
 	return intval($v * 10 + 0.5) / 10;
 }
 
