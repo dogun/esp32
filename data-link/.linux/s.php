@@ -2,6 +2,7 @@
 date_default_timezone_set('Asia/Hong_Kong');
 
 function pt($v, $b = 0, $s = 'PT') {
+	echo $v.' '.$b.' '.$s;
 	$c_data[0]['PT']['R150'] = 150;
 	$c_data[0]['PT']['vol'] = 3.3;
 	
@@ -14,6 +15,9 @@ function pt($v, $b = 0, $s = 'PT') {
 	$v = $v*$r150/($vol*4095/3.3-$v);
 	//$v = ($v-100)/0.3908-($v-100)*($v-100)/2.46e6;
 	$v = ($v-100)/0.384;
+	
+	echo ' '.$v."\n";
+	
 	return intval($v * 10 + 0.5) / 10;
 }
 
