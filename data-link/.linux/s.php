@@ -371,7 +371,7 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
                         </div>
                         <div class="summary-card">
                             <div class="summary-label">传感器</div>
-                            <div class="summary-value"><?= $s ?></div>
+                            <div class="summary-value"><?php foreach ($s as $sn) { echo " $sn, "; } ?></div>
                         </div>
                     </div>
                 </div>
