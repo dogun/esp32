@@ -47,7 +47,7 @@ while (($row = $q->fetch_assoc()) != NULL) {
 		if (!@$data[$sn]) $data[$sn] = array();
 		if (!@$data[$sn][$m]) $data[$sn][$m] = ['cnt' => 0, 'total' => 0];
 		$data[$sn][$m]['cnt'] ++;
-		$data[$sn][$m]['total'] += $row[$sn];
+		$data[$sn][$m]['total'] += intval(@$row[$sn]);
 	}
 }
 
