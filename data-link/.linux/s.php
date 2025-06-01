@@ -35,9 +35,10 @@ while (($row = $q->fetch_assoc()) != NULL) {
 }
 ?>
 
-
+<!-- 
 select FROM_UNIXTIME(timestamp), pt101, (om-100)/0.384 as t1, (om-100)/0.3908-(om-100)*(om-100)/2.46e6 as t2 from (SELECT timestamp, pt101, pt101*150/(4096-pt101) as om FROM `sensor`  
 WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by timestamp;
+-->
 
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -304,7 +305,7 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
                             <?php for ($i = 1; $i <= 3; $i++): ?>
                                 <div class="board-option">
                                     <input type="radio" name="board" id="board<?= $i ?>" value="<?= $i ?>" 
-                                        <?= $selectedBoard == $i ? 'checked' : '' ?>>
+                                        <?= $b == $i ? 'checked' : '' ?>>
                                     <label for="board<?= $i ?>"><?= $i ?>号板</label>
                                 </div>
                             <?php endfor; ?>
@@ -315,7 +316,7 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
                         <h3 class="filter-title">
                             <i>📅</i> 选择日期
                         </h3>
-                        <input type="date" name="date" class="date-picker" value="<?= $selectedDate ?>">
+                        <input type="date" name="date" class="date-picker" value="<?= $d ?>">
                     </div>
                     
                     <div class="filter-group">
@@ -346,7 +347,7 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
                     <div class="chart-header">
                         <h2 class="chart-title">数据变化曲线图</h2>
                         <div class="chart-info">
-                            <?= $b ?> | <?= $b ?>号板
+                            <?= $b ?>号板
                         </div>
                     </div>
                     
@@ -373,7 +374,7 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
         </form>
         
         <footer>
-            <p>温度传感器数据可视化系统 &copy; <?= date('Y') ?> | 模拟数据展示</p>
+            <p>传感器数据可视化系统 &copy; <?= date('Y') ?> | 数据展示</p>
         </footer>
     </div>
 </body>
