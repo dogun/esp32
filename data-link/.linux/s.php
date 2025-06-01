@@ -30,10 +30,10 @@ $type = 0;
 
 $ss = '';
 foreach ($s as $sn) {
-	$ss .= ", $sn"
+	$ss .= ", $sn";
 }
 
-$q = $mysqli->query("select timestamp, $ss as data from sensor where timestamp >= $stime and timestamp <= $etime and type=$type and board_no=$b order by timestamp asc");
+$q = $mysqli->query("select timestamp $ss as data from sensor where timestamp >= $stime and timestamp <= $etime and type=$type and board_no=$b order by timestamp asc");
 $data = array();
 while (($row = $q->fetch_assoc()) != NULL) {
 	$data[$row['timestamp']] = $row;
