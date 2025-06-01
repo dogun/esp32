@@ -33,6 +33,10 @@ while (($row = $q->fetch_assoc()) != NULL) {
 
 ?>
 
+
+select FROM_UNIXTIME(timestamp), pt101, (om-100)/0.384 as t1, (om-100)/0.3908-(om-100)*(om-100)/2.46e6 as t2 from (SELECT timestamp, pt101, pt101*150/(4096-pt101) as om FROM `sensor`  
+WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by timestamp;
+
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
