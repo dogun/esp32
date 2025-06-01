@@ -1,13 +1,21 @@
 <?php
 date_default_timezone_set('Asia/Hong_Kong');
 
-function pt($v) {
-	$v = $v*150/(4095-$v);
+function pt($v, $b = 0, $s = 'PT') {
+	$c_data[0]['PT']['R150'] = 150;
+	$c_data[0]['PT']['vol'] = 3.3;
+	
+	$c_data[1]['pt100']['R150'] = 153;
+	$c_data[1]['pt100']['vol'] = 3.25;
+	
+	$r150 = $c_data[$b][$s]['R150'];
+	$vol = $c_data[$b][$s]['vol'];
+
+	$v = $v*$r150/($vol*4095/3.3-$v);
 	//$v = ($v-100)/0.3908-($v-100)*($v-100)/2.46e6;
 	$v = ($v-100)/0.384;
 	return intval($v * 10 + 0.5) / 10;
 }
-
 
 include('pw.php');
 $mysqli = new mysqli('localhost', 'root', $pw, 'tofu');
