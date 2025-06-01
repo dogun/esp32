@@ -35,7 +35,7 @@ foreach ($s as $sn) {
 	$ss .= ", $sn";
 }
 
-$sql = "select timestamp, type $ss as data from sensor where timestamp >= $stime and timestamp <= $etime and board_no=$b order by timestamp asc";
+$sql = "select timestamp, type $ss from sensor where timestamp >= $stime and timestamp <= $etime and board_no=$b order by timestamp asc";
 echo $sql;
 $q = $mysqli->query($sql);
 $data = array();
@@ -48,7 +48,7 @@ while (($row = $q->fetch_assoc()) != NULL) {
 		if (!@$data[$sn]) $data[$sn] = array();
 		if (!@$data[$sn][$m]) $data[$sn][$m] = ['cnt' => 0, 'total' => 0];
 		$data[$sn][$m]['cnt'] ++;
-		$data[$sn][$m]['total'] += intval(@$row[$sn]);
+		$data[$sn][$m]['total'] += $row[$sn];
 	}
 }
 
