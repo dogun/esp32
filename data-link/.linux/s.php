@@ -7,7 +7,7 @@ $mysqli = new mysqli('localhost', 'root', $pw, 'tofu');
 // 处理表单提交
 $b = isset($_POST['board']) ? $_POST['board'] : '1';
 $d = isset($_POST['date']) ? $_POST['date'] : date('Y-m-d');
-$s = isset($_POST['sensor']) ? $_POST['sensor'] : 'pt100';
+$s = isset($_POST['sensors']) ? $_POST['sensors'] : ['pt100'];
 
 $b = intval($b);
 
@@ -24,14 +24,19 @@ $stime = strtotime($d.' 0:0:0');
 $etime = strtotime($d.' 23:59:59');
 
 $type = 0;
-if (strstr($s, 'current')) {
-	$type = 1;
+//if (strstr($s, 'current')) {
+//	$type = 1;
+//}
+
+$ss = '';
+foreach ($s as $sn) {
+	$ss .= ", $sn"
 }
 
-$q = $mysqli->query("select timestamp, $s as data from sensor where timestamp >= $stime and timestamp <= $etime and type=$type and board_no=$b order by timestamp asc");
+$q = $mysqli->query("select timestamp, $ss as data from sensor where timestamp >= $stime and timestamp <= $etime and type=$type and board_no=$b order by timestamp asc");
 $data = array();
 while (($row = $q->fetch_assoc()) != NULL) {
-	$data[$row['timestamp']] = $row['data'];
+	$data[$row['timestamp']] = $row;
 }
 ?>
 
@@ -330,7 +335,7 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
                             ?>
                                 <div class="sensor-option sensor-<?= $name ?>">
                                     <input type="checkbox" name="sensors[]" id="sensor-<?= $name ?>" value="<?= $name ?>"
-                                        <?= $name == $s ? 'checked' : '' ?>>
+                                        <?= in_array($name, $s) ? 'checked' : '' ?>>
                                     <div class="sensor-color"></div>
                                     <label for="sensor-<?= $name ?>"><?= $name ?> 传感器</label>
                                 </div>
