@@ -25,12 +25,12 @@ if (strstr($s, 'current')) {
 	$type = 1;
 }
 
-$q = $mysqli->query("select timestamp, $s from sensor where timestamp >= $stime and timestamp <= $etime and type=$type and board=$board order by timestamp asc");
+$q = $mysqli->query("select timestamp, $s as data from sensor where timestamp >= $stime and timestamp <= $etime and type=$type and board=$board order by timestamp asc");
 $data = array();
 while (($row = $q->fetch_assoc()) != NULL) {
-	$data[$row['timestamp']] = $row[$s];
+	$data[$row['timestamp']] = $row['data'];
 }
-
+print_r($data);
 ?>
 
 
@@ -322,14 +322,14 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
                         </h3>
                         <div class="sensor-options">
                             <?php 
-                            $sensors = ['pt100' => 'PT100', 'pt101' => 'PT101', 'pt102' => 'PT102'];
+                            $sensors = $cs;
                             foreach ($sensors as $id => $name): 
                             ?>
-                                <div class="sensor-option sensor-<?= $id ?>">
-                                    <input type="checkbox" name="sensors[]" id="sensor-<?= $id ?>" value="<?= $id ?>"
-                                        <?= in_array($id, $selectedSensors) ? 'checked' : '' ?>>
+                                <div class="sensor-option sensor-<?= $name ?>">
+                                    <input type="checkbox" name="sensors[]" id="sensor-<?= $name ?>" value="<?= $name ?>"
+                                        <?= $name == $s ? 'checked' : '' ?>>
                                     <div class="sensor-color"></div>
-                                    <label for="sensor-<?= $id ?>"><?= $name ?> 传感器</label>
+                                    <label for="sensor-<?= $name ?>"><?= $name ?> 传感器</label>
                                 </div>
                             <?php endforeach; ?>
                         </div>
@@ -344,7 +344,7 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
                     <div class="chart-header">
                         <h2 class="chart-title">数据变化曲线图</h2>
                         <div class="chart-info">
-                            <?= $selectedDate ?> | <?= $selectedBoard ?>号板
+                            <?= $b ?> | <?= $b ?>号板
                         </div>
                     </div>
                     
@@ -355,15 +355,15 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
                     <div class="data-summary">
                         <div class="summary-card">
                             <div class="summary-label">当前板子</div>
-                            <div class="summary-value"><?= $selectedBoard ?>号</div>
+                            <div class="summary-value"><?= $s ?>号</div>
                         </div>
                         <div class="summary-card">
                             <div class="summary-label">监测日期</div>
-                            <div class="summary-value"><?= $selectedDate ?></div>
+                            <div class="summary-value"><?= $d ?></div>
                         </div>
                         <div class="summary-card">
-                            <div class="summary-label">传感器数量</div>
-                            <div class="summary-value"><?= count($selectedSensors) ?></div>
+                            <div class="summary-label">传感器</div>
+                            <div class="summary-value"><?= $s ?></div>
                         </div>
                     </div>
                 </div>
