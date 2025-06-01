@@ -28,4 +28,3 @@ if ($r) {
 $q = $mysqli->query("insert into sensor (board_no,type,timestamp,pt100,pt101,pt102,pt103,flow1,flow2,flow3,flow4,current1,current2,current3,current4) values ($board, $type, $ts, $pt100, $pt101, $pt102, $pt103, $flow1, $flow2, $flow3, $flow4, $current1, $current2, $current3, $current4)");
 echo $q;
 ?>
-
