@@ -46,9 +46,11 @@ while (($row = $q->fetch_assoc()) != NULL) {
 		if (strstr($sn, 'current') && $t == 0) continue;
 		if (!strstr($sn, 'current') && $t == 1) continue;
 		if (!@$data[$sn]) $data[$sn] = array();
-		if (!@$data[$sn][$m]) $data[$sn][$m] = ['cnt' => 0, 'total' => 0];
+		if (!@$data[$sn][$m]) $data[$sn][$m] = ['cnt' => 0, 'total' => 0, 'max' => 0, 'min' => 10000];
 		$data[$sn][$m]['cnt'] ++;
 		$data[$sn][$m]['total'] += $row[$sn];
+		if ($row[$sn] > $data[$sn][$m]['max']) $data[$sn][$m]['max'] = $row[$sn];
+		if ($row[$sn] < $data[$sn][$m]['min']) $data[$sn][$m]['min'] = $row[$sn];
 	}
 }
 
@@ -60,7 +62,7 @@ foreach ($data as $sn => $row) {
 		if (!in_array($m, $times)) $times[] = $m;
 		$data[$sn][$m]['val'] = $row1['total'] / $row1['cnt'];
 		if (strstr($sn, 'pt10')) {
-			$data[$sn][$m]['val'] = pt($data[$sn][$m]['val']);
+			$data[$sn][$m]['val'] = pt($data[$sn][$m]['max']);
 		}
 		$datas[$sn][] = $data[$sn][$m]['val'];
 		//echo $sn.' '.$m.' '.$data[$sn][$m]['val']."\n";
