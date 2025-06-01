@@ -71,7 +71,7 @@ foreach ($data as $sn => $row) {
 		if (!in_array($m, $times)) $times[] = $m;
 		$data[$sn][$m]['val'] = $row1['total'] / $row1['cnt'];
 		if (strstr($sn, 'pt10')) {
-			$data[$sn][$m]['val'] = pt($data[$sn][$m]['max']);
+			$data[$sn][$m]['val'] = pt($data[$sn][$m]['max'], $b, $sn);
 		}
 		$datas[$sn][] = $data[$sn][$m]['val'];
 		//echo $sn.' '.$m.' '.$data[$sn][$m]['val']."\n";
