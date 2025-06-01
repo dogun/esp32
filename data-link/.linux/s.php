@@ -13,8 +13,11 @@ $b = intval($b);
 
 $q = $mysqli->query("SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = 'tofu' AND TABLE_NAME = 'sensor'");
 $cs = array();
+$i = 0;
 while (($row = $q->fetch_assoc()) != NULL) {
-	$cs[] = $row['COLUMN_NAME'];
+	$i++;
+	if ($i > 4)
+		$cs[] = $row['COLUMN_NAME'];
 }
 
 $stime = strtotime($d.' 0:0:0');
@@ -30,7 +33,6 @@ $data = array();
 while (($row = $q->fetch_assoc()) != NULL) {
 	$data[$row['timestamp']] = $row['data'];
 }
-print_r($data);
 ?>
 
 
@@ -355,7 +357,7 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
                     <div class="data-summary">
                         <div class="summary-card">
                             <div class="summary-label">当前板子</div>
-                            <div class="summary-value"><?= $s ?>号</div>
+                            <div class="summary-value"><?= $b ?>号</div>
                         </div>
                         <div class="summary-card">
                             <div class="summary-label">监测日期</div>
