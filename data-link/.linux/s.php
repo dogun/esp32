@@ -25,7 +25,7 @@ if (strstr($s, 'current')) {
 	$type = 1;
 }
 
-$q = $mysqli->query("select timestamp, $s as data from sensor where timestamp >= $stime and timestamp <= $etime and type=$type and board=$board order by timestamp asc");
+$q = $mysqli->query("select timestamp, $s as data from sensor where timestamp >= $stime and timestamp <= $etime and type=$type and board=$b order by timestamp asc");
 $data = array();
 while (($row = $q->fetch_assoc()) != NULL) {
 	$data[$row['timestamp']] = $row['data'];
