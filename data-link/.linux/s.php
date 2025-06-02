@@ -4,10 +4,10 @@ date_default_timezone_set('Asia/Hong_Kong');
 function pt($v, $b = 0, $s = 'PT') {
 	//echo $v.' '.$b.' '.$s;
 	$c_data[0]['PT']['R150'] = 150;
-	$c_data[0]['PT']['vol'] = 3.27;
+	$c_data[0]['PT']['vol'] = 3.26;
 	
 	$c_data[2]['pt100']['R150'] = 150;
-	$c_data[2]['pt100']['vol'] = 3.27;
+	$c_data[2]['pt100']['vol'] = 3.26;
 	
 	if (!@$c_data[$b][$s]) {
 		$b = 0;
