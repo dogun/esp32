@@ -27,7 +27,8 @@ while (true) {
 	if (strlen($line) > 0) {
 		$pos_r[$file] = $pos;
 		$arr = explode(':', $line);
-		$ts = $arr[0];
+		$ts = intval($arr[0]);
+		if ($ts <= 1648235485) continue;
 		$ds = trim($arr[1]);
 		$ds = explode(',', $ds);
 		$board = $ds[0];
