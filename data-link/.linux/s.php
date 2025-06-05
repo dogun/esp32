@@ -114,7 +114,7 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
         }
         
         body {
-            background: linear-gradient(135deg, #1a2a6c, #b21f1f, #1a2a6c);
+            background: linear-gradient(135deg, #DDDDDD, #FFFFFF, #DDDDDD);
             color: #fff;
             min-height: 100vh;
             padding: 20px;
