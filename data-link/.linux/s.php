@@ -30,9 +30,9 @@ include('pw.php');
 $mysqli = new mysqli('localhost', 'root', $pw, 'tofu');
 
 // 处理表单提交
-$b = isset($_POST['board']) ? $_POST['board'] : '1';
-$d = isset($_POST['date']) ? $_POST['date'] : date('Y-m-d');
-$s = isset($_POST['sensors']) ? $_POST['sensors'] : ['pt100'];
+$b = isset($_REQUEST['board']) ? $_REQUEST['board'] : '1';
+$d = isset($_REQUEST['date']) ? $_REQUEST['date'] : date('Y-m-d');
+$s = isset($_REQUEST['sensors']) ? $_REQUEST['sensors'] : ['pt100'];
 
 $b = intval($b);
 
@@ -361,7 +361,7 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
             <p class="subtitle">支持按板子、日期和传感器筛选</p>
         </header>
         
-        <form method="POST">
+        <form method="GET">
             <div class="dashboard">
                 <div class="filters">
                     <div class="filter-group">
