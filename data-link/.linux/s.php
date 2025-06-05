@@ -474,7 +474,7 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
                 borderColor: colors[sensor],
                 backgroundColor: colors[sensor] + '20',
                 borderWidth: 1,
-                pointRadius: 2,
+                pointRadius: 1,
                 pointBackgroundColor: colors[sensor],
                 tension: 0.3,
                 fill: false
