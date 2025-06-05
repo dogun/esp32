@@ -132,7 +132,7 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
         }
         
         h1 {
-            font-size: 1.8rem;
+            font-size: 2.2rem;
             margin-bottom: 10px;
             text-shadow: 0 2px 4px rgba(0,0,0,0.3);
         }
