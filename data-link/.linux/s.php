@@ -127,8 +127,8 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
         
         header {
             text-align: center;
-            padding: 30px 0;
-            margin-bottom: 20px;
+            padding: 10px 0;
+            margin-bottom: 10px;
         }
         
         h1 {
