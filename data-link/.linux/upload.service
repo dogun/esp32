@@ -1,0 +1,13 @@
+[Unit]
+Description=data center upload service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/bin/bash /home/dl/esp32/data-link/.linux/upload.sh
+User=root
+WorkingDirectory=/home/dl/esp32/data-link/.linux/
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
