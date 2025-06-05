@@ -262,7 +262,7 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
         .sensor-pt100 .sensor-color { background: #FF6384; }
         .sensor-pt101 .sensor-color { background: #36A2EB; }
         .sensor-pt102 .sensor-color { background: #4BC0C0; }
-        .sensor-pt103 .sensor-color { background: #0CC0C0; }
+        .sensor-pt103 .sensor-color { background: #0CC044; }
 		.sensor-flow1 .sensor-color { background: #111111; }
 		.sensor-flow2 .sensor-color { background: #DD11DD; }
 		.sensor-flow3 .sensor-color { background: #1111DD; }
@@ -456,7 +456,7 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
 			'pt100' : '#FF6384',
 			'pt101' : '#36A2EB',
 			'pt102' : '#4BC0C0',
-			'pt103' : '#0CC0C0',
+			'pt103' : '#0CC044',
 			'flow1' : '#111111',
 			'flow2' : '#DD11DD',
 			'flow3' : '#1111DD',
