@@ -267,7 +267,7 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
 		.sensor-flow2 .sensor-color { background: #DD11DD; }
 		.sensor-flow3 .sensor-color { background: #1111DD; }
 		.sensor-flow4 .sensor-color { background: #DD1111; }
-		.sensor-current1 .sensor-color { background: #555555; }
+		.sensor-current1 .sensor-color { background: #55FF55; }
 		.sensor-current2 .sensor-color { background: #CC55DD; }
 		.sensor-current3 .sensor-color { background: #5555CC; }
 		.sensor-current4 .sensor-color { background: #CC5555; }
@@ -461,7 +461,7 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
 			'flow2' : '#DD11DD',
 			'flow3' : '#1111DD',
 			'flow4' : '#DD1111',
-			'current1' : '#555555',
+			'current1' : '#55FF55',
 			'current2' : '#CC55DD',
 			'current3' : '#5555CC',
 			'current4' : '#CC5555'
