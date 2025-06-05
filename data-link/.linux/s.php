@@ -262,6 +262,15 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
         .sensor-pt100 .sensor-color { background: #FF6384; }
         .sensor-pt101 .sensor-color { background: #36A2EB; }
         .sensor-pt102 .sensor-color { background: #4BC0C0; }
+        .sensor-pt103 .sensor-color { background: #0CC0C0; }
+		.sensor-flow1 .sensor-color { background: #111111; }
+		.sensor-flow2 .sensor-color { background: #DD11DD; }
+		.sensor-flow3 .sensor-color { background: #1111DD; }
+		.sensor-flow4 .sensor-color { background: #DD1111; }
+		.sensor-current1 .sensor-color { background: #555555; }
+		.sensor-current2 .sensor-color { background: #CC55DD; }
+		.sensor-current3 .sensor-color { background: #5555CC; }
+		.sensor-current4 .sensor-color { background: #CC5555; }
         
         .btn-submit {
             width: 100%;
@@ -444,14 +453,23 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
         // 准备图表数据
         const datasets = [];
         const colors = {
-            'pt100': '#FF6384',
-            'pt101': '#36A2EB',
-            'pt102': '#4BC0C0'
+			'pt100' : '#FF6384',
+			'pt101' : '#36A2EB',
+			'pt102' : '#4BC0C0',
+			'pt103' : '#0CC0C0',
+			'flow1' : '#111111',
+			'flow2' : '#DD11DD',
+			'flow3' : '#1111DD',
+			'flow4' : '#DD1111',
+			'current1' : '#555555',
+			'current2' : '#CC55DD',
+			'current3' : '#5555CC',
+			'current4' : '#CC5555'
         };
         
         selectedSensors.forEach(sensor => {
             datasets.push({
-                label: sensor.toUpperCase() + ' 温度',
+                label: sensor.toUpperCase() + ' 数据',
                 data: chartData.data[sensor],
                 borderColor: colors[sensor],
                 backgroundColor: colors[sensor] + '20',
@@ -502,7 +520,7 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
                             color: 'rgba(255, 255, 255, 0.7)',
                             maxRotation: 0,
                             autoSkip: true,
-                            maxTicksLimit: 12
+                            maxTicksLimit: 24
                         },
                         title: {
                             display: true,
@@ -522,7 +540,7 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
                         },
                         title: {
                             display: true,
-                            text: '温度 (°C)',
+                            text: '数据',
                             color: 'rgba(255, 255, 255, 0.8)',
                             font: {
                                 size: 14
