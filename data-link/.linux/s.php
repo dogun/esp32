@@ -473,8 +473,8 @@ WHERE board_no=2 and type=0 and timestamp>unix_timestamp() - 86400) t order by t
                 data: chartData.data[sensor],
                 borderColor: colors[sensor],
                 backgroundColor: colors[sensor] + '20',
-                borderWidth: 3,
-                pointRadius: 4,
+                borderWidth: 1,
+                pointRadius: 2,
                 pointBackgroundColor: colors[sensor],
                 tension: 0.3,
                 fill: false
