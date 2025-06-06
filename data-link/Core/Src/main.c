@@ -561,13 +561,8 @@ HAL_StatusTypeDef check_pack() {
 }
 
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *uart) {
-	if (check_pack() != HAL_OK) {
-		recv_data(1); //继续接收
-		return;
-	}
-	recv_log_ok(recv_buf.type);
-#ifdef SERVER
-	logger.recv_cnt_by_client[recv_buf.client_id-1]++;
+#ifdef SERVER //不做任何校验，收到的内容全部串口发送出去
+	//logger.recv_cnt_by_client[recv_buf.client_id-1]++; //暂不记录日志，避免错误的包导致的内存错误
 	memcpy((void*)&send_buf, (void*)&recv_buf, PACKAGE_LEN);
 	recv_data(0);
 	last_recv_time = HAL_GetTick();
@@ -576,6 +571,11 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *uart) {
 		logger.uart1_error_cnt++;
 	}
 #else
+	if (check_pack() != HAL_OK) {
+		recv_data(1); //继续接收
+		return;
+	}
+	recv_log_ok(recv_buf.type);
 	last_client_id = recv_buf.client_id;
 	recv_data(0); //继续接收
 	logger.recv_cnt_by_client[last_client_id-1]++;
