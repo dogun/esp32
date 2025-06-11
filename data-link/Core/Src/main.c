@@ -132,6 +132,7 @@ uint8_t last_client_id = 0;
 
 uint32_t get_adc_val(uint32_t index) {
 	ADC_ChannelConfTypeDef sConfig = { 0 };
+	sConfig.SamplingTime = ADC_SAMPLETIME_239CYCLES_5;
 	switch (index) {
 	case 0:
 		sConfig.Channel = ADC_CHANNEL_0;
@@ -181,6 +182,12 @@ uint32_t get_adc_val(uint32_t index) {
 	case 15:
 		sConfig.Channel = ADC_CHANNEL_15;
 		break;
+	case 16:
+		sConfig.Channel = ADC_CHANNEL_TEMPSENSOR;
+		break;
+	case 17:
+		sConfig.Channel = ADC_CHANNEL_VREFINT;
+		break;
 
 	default:
 		break;
@@ -194,6 +201,7 @@ uint32_t get_adc_val(uint32_t index) {
 	HAL_ADC_Start(&hadc1);
 	HAL_ADC_PollForConversion(&hadc1, HAL_MAX_DELAY);
 	uint32_t val = HAL_ADC_GetValue(&hadc1);
+	HAL_ADC_Stop(&hadc1);
 
 	return val;
 }
@@ -334,9 +342,9 @@ HAL_StatusTypeDef recv_data(uint8_t reset) {
 }
 
 HAL_StatusTypeDef send_pt100_flow_data() {
-	int val[16] = { 0 };
+	int val[12] = { 0 };
 	uint32_t i = 0;
-	for (i = 0; i < 16; ++i) {
+	for (i = 0; i < 12; ++i) {
 		val[i] = get_adc_val(i);
 	}
 
@@ -360,21 +368,15 @@ HAL_StatusTypeDef send_pt100_flow_data() {
 }
 
 HAL_StatusTypeDef send_current_data() {
-	int val[16] = { 0 };
+	int val[6] = { 0 };
 	uint32_t i = 0;
-	for (i = 0; i < 16; ++i) {
-		val[i] = get_adc_val(i);
+	uint32_t j = 0;
+	for (i = 12; i < 18; ++i) {
+		val[j++] = get_adc_val(i);
 	}
-	//填充数据
-	uint32_t data[4] = { 0 };
 
-	//3. current数据
-	data[0] = val[12];
-	data[1] = val[13];
-	data[2] = val[14];
-	data[3] = val[15];
 	HAL_StatusTypeDef ret = send_data_to_server(DATA_TYPE_CURRENT,
-			(uint8_t*) data, 4 * sizeof(uint32_t));
+			(uint8_t*) val, 6 * sizeof(uint32_t));
 
 	return ret;
 }
