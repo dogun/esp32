@@ -16,6 +16,9 @@ $current2 = intval($_GET['current2']);
 $current3 = intval($_GET['current3']);
 $current4 = intval($_GET['current4']);
 
+$mcu_tem = intval($_GET['mcu_tem']);
+$vref = intval($_GET['vref']);
+
 include('pw.php');
 $mysqli = new mysqli('localhost', 'root', $pw, 'tofu');
 
@@ -25,6 +28,6 @@ if ($r) {
 	echo "ex\n";
 	die;
 }
-$q = $mysqli->query("insert into sensor (board_no,type,timestamp,pt100,pt101,pt102,pt103,flow1,flow2,flow3,flow4,current1,current2,current3,current4) values ($board, $type, $ts, $pt100, $pt101, $pt102, $pt103, $flow1, $flow2, $flow3, $flow4, $current1, $current2, $current3, $current4)");
+$q = $mysqli->query("insert into sensor (board_no,type,timestamp,pt100,pt101,pt102,pt103,flow1,flow2,flow3,flow4,current1,current2,current3,current4, mcu_tem, vref) values ($board, $type, $ts, $pt100, $pt101, $pt102, $pt103, $flow1, $flow2, $flow3, $flow4, $current1, $current2, $current3, $current4, $mcu_tem, $vref)");
 echo $q;
 ?>
