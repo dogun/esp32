@@ -23,9 +23,9 @@ while (true) {
 	    }
 		$line .= $char;
 	}
+	$pos_r[$file] = $pos;
 	//echo "$line \n";
 	if (strlen($line) > 0) {
-		$pos_r[$file] = $pos;
 		$arr = explode(':', $line);
 		$ts = intval($arr[0]);
 		if ($ts <= 1648235485) continue;
@@ -63,8 +63,8 @@ while (true) {
 			$current2 = $ds[3];
 			$current3 = $ds[4];
 			$current4 = $ds[5];
-			$mcu_tem = $ds[6];
-			$vref = $ds[7];
+			$mcu_tem = @$ds[6];
+			$vref = @$ds[7];
 		}
 		//echo "$ts $board $type $pt100 $pt101 $pt102 $pt103 $flow1 $flow2 $flow3 $flow4 $current1 $current2 $current3 $current4 $mcu_tem $vref\n";
 		$params = "ts=$ts&board=$board&type=$type&pt100=$pt100&pt101=$pt101&pt102=$pt102&pt103=$pt103&flow1=$flow1&flow2=$flow2&flow3=$flow3&flow4=$flow4&current1=$current1&current2=$current2&current3=$current3&current4=$current4&mcu_tem=$mcu_tem&vref=$vref";
