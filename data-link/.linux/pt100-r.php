@@ -1,7 +1,5 @@
 <?php
-
-function pt100($r) {
-	$t = "18.52
+$pt100_t = "18.52
 22.83
 27.10
 31.34
@@ -851,9 +849,12 @@ function pt100($r) {
 328.69
 329.01
 329.32";
-	$arr = explode("\n", $t);
-	sort($arr);
-	foreach ($arr as $k=>$v) {
+$pt100_arr = explode("\n", $pt100_t);
+sort($pt100_arr);
+	
+function pt100($r) {
+	global $pt100_arr;
+	foreach ($pt100_arr as $k=>$v) {
 		if ($v >= $r) {
 			return $k - 200;
 		}
