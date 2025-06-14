@@ -1,6 +1,8 @@
 <?php
 date_default_timezone_set('Asia/Hong_Kong');
 
+include('pt100-r.php');
+
 function pt($v, $b = 0, $s = 'PT') {
 	//echo $v.' '.$b.' '.$s;
 	$c_data[0]['PT']['R150'] = 150;
@@ -18,8 +20,10 @@ function pt($v, $b = 0, $s = 'PT') {
 	
 	$v = $r150 * ($pt100_adc / (4095 - $pt100_adc) - $line_adc / (4095 - $line_adc));
 
-	$v = ($v-100)/0.3908-($v-100)*($v-100)/2.46e6;
+	// $v = ($v-100)/0.3908-($v-100)*($v-100)/2.46e6;
 	// $v = ($v-100)/0.384;
+	
+	$v = pt100($v);
 	
 	//echo ' '.$v."\n";
 	
