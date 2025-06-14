@@ -13,7 +13,7 @@ function pt($v, $b = 0, $s = 'PT') {
 	
 	$r150 = $c_data[$b][$s]['R150'];
 
-	$line_adc = 16;
+	$line_adc = 17;
 	$pt100_adc = $v + $line_adc;
 	
 	$v = $r150 * ($pt100_adc / (4095 - $pt100_adc) - $line_adc / (4095 - $line_adc));
@@ -23,7 +23,7 @@ function pt($v, $b = 0, $s = 'PT') {
 	
 	//echo ' '.$v."\n";
 	
-	return intval($v * 10 + 0.5) / 10;
+	return intval($v + 0.5);
 }
 
 include('pw.php');

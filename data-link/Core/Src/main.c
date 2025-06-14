@@ -341,6 +341,18 @@ HAL_StatusTypeDef recv_data(uint8_t reset) {
 	return HAL_OK;
 }
 
+uint32_t get_pt100_adc(uint32_t m, uint32_t n) {
+	int i = (m > n) ? m - n : n - m;
+	if (i < 10) return 0;
+
+	float max = 4095;
+	float s1 = m / (max - m);
+	float s2 = n / (max - n);
+	float s = (s1 > s2) ? (s1 - s2) : (s2 - s1);
+	float r_adc = max * s / (1 + s);
+	return (uint32_t)(r_adc + 0.5);
+}
+
 HAL_StatusTypeDef send_pt100_flow_data() {
 	int val[12] = { 0 };
 	uint32_t i = 0;
@@ -352,10 +364,10 @@ HAL_StatusTypeDef send_pt100_flow_data() {
 	uint32_t data[8] = { 0 };
 
 	//1.PT100数据
-	data[0] = (val[0] > val[1]) ? val[0] - val[1] : val[1] - val[0];
-	data[1] = (val[2] > val[3]) ? val[2] - val[3] : val[3] - val[2];
-	data[2] = (val[4] > val[5]) ? val[4] - val[5] : val[5] - val[4];
-	data[3] = (val[6] > val[7]) ? val[6] - val[7] : val[7] - val[6];
+	data[0] = get_pt100_adc(val[0], val[1]);
+	data[1] = get_pt100_adc(val[2], val[3]);
+	data[2] = get_pt100_adc(val[4], val[5]);
+	data[3] = get_pt100_adc(val[6], val[7]);
 	//2.flow数据
 	data[4] = val[8];
 	data[5] = val[9];
