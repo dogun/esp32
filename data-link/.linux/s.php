@@ -4,20 +4,20 @@ date_default_timezone_set('Asia/Hong_Kong');
 function pt($v, $b = 0, $s = 'PT') {
 	//echo $v.' '.$b.' '.$s;
 	$c_data[0]['PT']['R150'] = 150;
-	$c_data[0]['PT']['vol'] = 3.26;
-	
 	$c_data[2]['pt100']['R150'] = 150;
-	$c_data[2]['pt100']['vol'] = 3.26;
-	
+
 	if (!@$c_data[$b][$s]) {
 		$b = 0;
 		$s = 'PT';
 	}
 	
 	$r150 = $c_data[$b][$s]['R150'];
-	$vol = $c_data[$b][$s]['vol'];
 
-	$v = $v*$r150/($vol*4095/3.3-$v);
+	$line_adc = 16;
+	$pt100_adc = $v + $line_adc;
+	
+	$v = $r150 * ($pt100_adc / (4095 - $pt100_adc) - $line_adc / (4095 - $line_adc));
+
 	$v = ($v-100)/0.3908-($v-100)*($v-100)/2.46e6;
 	// $v = ($v-100)/0.384;
 	
