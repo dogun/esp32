@@ -407,7 +407,7 @@ HAL_StatusTypeDef send_data_switch() {
 }
 
 uint8_t pre_id(uint8_t me) {
-	if (me == 1) return CLIENT_NUM;
+	if (me == 1) return CLIENT_NUM - 1;
 	return me - 1;
 }
 
