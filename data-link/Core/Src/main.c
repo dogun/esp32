@@ -68,8 +68,8 @@ void SystemClock_Config(void);
  * 采用透传模式，共支持10个客户端，全部采用FF信道，但是定义各自的ID，互相协同，按照顺序分别发送
  */
 
-//#define SERVER
-#define CLIENT_ID 0x02
+#define SERVER
+#define CLIENT_ID 0x03
 #define CLIENT_NUM 3
 #define SEND_WAIT_TIME 2000
 
@@ -472,11 +472,13 @@ int main(void)
 	while (1) {
 #ifdef SERVER
 		//不需要做事情了
+		HAL_Delay(10);
 #else
 		//一直循环计时，判断之前收到的消息id是不是自己的上一个，如果不是，继续等待接收，直到上一个到达
 		uint32_t now = HAL_GetTick();
 		if (is_pre(CLIENT_ID, last_client_id)) { //现在收到的是我的上一个
 			if (last_send_time < last_recv_time_a[pre_id(CLIENT_ID) - 1]) { //是新收到的消息，这里不使用last_client_id，避免中间过程被中断改写
+				HAL_Delay(10);
 				send_data_switch();
 				logger.send_ok_cnt ++;
 				last_send_time = now;
@@ -488,6 +490,7 @@ int main(void)
 					CLIENT_NUM - last_client_id + CLIENT_ID :
 													CLIENT_ID - last_client_id;
 			if (now - MAX(last_recv_time, last_send_time) >= SEND_WAIT_TIME * dist) { //需要发送了
+				HAL_Delay(10);
 				send_data_switch();
 				logger.send_ok_timeout_cnt++;
 				last_send_time = now;
